@@ -399,7 +399,7 @@ in {
 
         package = mkOption {
           type = package;
-          default = "${getExe' cfg.package "init-script-builder"}";
+          default = getExe' cfg.package "init-script-builder";
           defaultText = literalExpression "$${getExe' cfg.package \"init-script-builder\"}";
           description = "The bootloader installer package to use";
         };
