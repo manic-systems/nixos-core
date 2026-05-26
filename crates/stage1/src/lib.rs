@@ -1299,7 +1299,7 @@ fn run_fsck(device: &str, fstype: &str, _options: &[String]) -> Result<bool> {
   }
 
   let mut cmd = Command::new("fsck");
-  cmd.arg("-a").arg("-T").arg(device);
+  cmd.arg("-a").arg("-t").arg(fstype).arg("-T").arg(device);
 
   // Add filesystem type specific options
   match fstype {
@@ -2472,7 +2472,10 @@ fn parse_mount_options<'a>(
   for opt in opts {
     match opt {
       "ro" => flags |= MsFlags::MS_RDONLY,
-      "rw" | "exec" | "async" | "" => {},
+      // userspace-only options are silently handled by mount(8), but must be
+      // stripped before mount(2)
+      "defaults" | "auto" | "noauto" | "user" | "nouser" | "_netdev"
+      | "nofail" | "rw" | "exec" | "async" | "" => {},
       "nosuid" => flags |= MsFlags::MS_NOSUID,
       "nodev" => flags |= MsFlags::MS_NODEV,
       "noexec" => flags |= MsFlags::MS_NOEXEC,
