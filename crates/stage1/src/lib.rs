@@ -6,7 +6,11 @@ use std::{
   io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
   os::{
     fd::AsRawFd,
-    unix::fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
+    unix::{
+      fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
+      io::FromRawFd,
+      process::CommandExt,
+    },
   },
   path::{Path, PathBuf},
   process::{Command, ExitStatus, Stdio},
@@ -60,6 +64,12 @@ enum DeviceManager {
     mdev: PathBuf,
     conf: Option<PathBuf>,
   },
+  Mdevd {
+    mdevd:    PathBuf,
+    coldplug: PathBuf,
+    conf:     Option<PathBuf>,
+    pid:      Option<libc::pid_t>,
+  },
 }
 
 impl Default for DeviceManager {
@@ -86,6 +96,26 @@ impl DeviceManager {
           conf: env::var("MDEV_CONF").ok().map(PathBuf::from),
         }
       },
+      Ok("mdevd") => {
+        Self::Mdevd {
+          mdevd:    env::var("MDEVD_BINARY").map(PathBuf::from).unwrap_or_else(
+            |_| {
+              extra_utils
+                .map_or_else(|| PathBuf::from("mdevd"), |u| u.join("bin/mdevd"))
+            },
+          ),
+          coldplug: env::var("MDEVD_COLDPLUG_BINARY")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+              extra_utils.map_or_else(
+                || PathBuf::from("mdevd-coldplug"),
+                |u| u.join("bin/mdevd-coldplug"),
+              )
+            }),
+          conf:     env::var("MDEV_CONF").ok().map(PathBuf::from),
+          pid:      None,
+        }
+      },
       _ => {
         Self::Udev {
           udevd:   env::var("UDEV_BINARY").map(PathBuf::from).unwrap_or_else(
@@ -110,11 +140,12 @@ impl DeviceManager {
     }
   }
 
-  fn start(&self) -> Result<()> {
+  fn start(&mut self) -> Result<()> {
     log_message("Starting device manager...", true);
     match self {
       Self::Udev { udevd, rules, .. } => {
-        if let Some(rules) = rules {
+        let udevd = udevd.as_path();
+        if let Some(rules) = rules.as_deref() {
           let rules_dir = Path::new("/etc/udev/rules.d");
           fs::create_dir_all(rules_dir)?;
           if rules.is_dir() {
@@ -137,17 +168,8 @@ impl DeviceManager {
           })?;
       },
       Self::Mdev { mdev, conf } => {
-        if let Some(conf) = conf {
-          let dest = Path::new("/etc/mdev.conf");
-          fs::create_dir_all(dest.parent().unwrap())?;
-          fs::copy(conf, dest).with_context(|| {
-            format!(
-              "Failed to copy mdev.conf from {} to {}",
-              conf.display(),
-              dest.display()
-            )
-          })?;
-        }
+        let mdev = mdev.as_path();
+        install_mdev_conf(conf.as_deref())?;
         // -d: listen for kernel hotplug events; -s: initial coldplug scan.
         Command::new(mdev).arg("-d").status().with_context(|| {
           format!("Failed to start mdev: {}", mdev.display())
@@ -155,6 +177,83 @@ impl DeviceManager {
         Command::new(mdev).arg("-s").status().with_context(|| {
           format!("mdev coldplug scan failed: {}", mdev.display())
         })?;
+      },
+      Self::Mdevd {
+        mdevd,
+        coldplug,
+        conf,
+        pid,
+      } => {
+        let mdevd = mdevd.as_path();
+        let coldplug = coldplug.as_path();
+        install_mdev_conf(conf.as_deref())?;
+        let mut fds = [-1; 2];
+        if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+          bail!("Failed to create mdevd readiness pipe");
+        }
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+
+        let mut command = Command::new(mdevd);
+        command.args(["-D", "3", "-O", "4"]);
+        unsafe {
+          command.pre_exec(move || {
+            libc::close(read_fd);
+            if libc::dup2(write_fd, 3) == -1 {
+              return Err(std::io::Error::last_os_error());
+            }
+            if write_fd != 3 {
+              libc::close(write_fd);
+            }
+            Ok(())
+          });
+        }
+
+        let mut child = match command.spawn() {
+          Ok(child) => child,
+          Err(e) => {
+            unsafe {
+              libc::close(read_fd);
+              libc::close(write_fd);
+            }
+            return Err(e).with_context(|| {
+              format!("Failed to start mdevd: {}", mdevd.display())
+            });
+          },
+        };
+        unsafe {
+          libc::close(write_fd);
+        }
+        let child_pid = child.id() as libc::pid_t;
+
+        let mut readiness = unsafe { File::from_raw_fd(read_fd) };
+        let mut byte = [0u8; 1];
+        if let Err(e) = readiness.read_exact(&mut byte) {
+          let _ = child.wait();
+          return Err(e).with_context(|| {
+            format!("mdevd did not become ready: {}", mdevd.display())
+          });
+        }
+        drop(readiness);
+
+        let status = match Command::new(coldplug).args(["-O", "4"]).status() {
+          Ok(status) => status,
+          Err(e) => {
+            unsafe {
+              libc::kill(child_pid, libc::SIGTERM);
+            }
+            return Err(e).with_context(|| {
+              format!("mdevd coldplug failed: {}", coldplug.display())
+            });
+          },
+        };
+        if !status.success() {
+          unsafe {
+            libc::kill(child_pid, libc::SIGTERM);
+          }
+          bail!("mdevd coldplug exited with status: {status}");
+        }
+        *pid = Some(child_pid);
       },
     }
     log_message("Device manager started", true);
@@ -172,6 +271,9 @@ impl DeviceManager {
       },
       Self::Mdev { .. } => {
         // Covered by the -s scan in start(); nothing more to do.
+      },
+      Self::Mdevd { .. } => {
+        // Covered by the synchronous mdevd-coldplug in start().
       },
     }
     Ok(())
@@ -192,6 +294,10 @@ impl DeviceManager {
       Self::Mdev { .. } => {
         // mdev -s is synchronous; no separate settle step.
       },
+      Self::Mdevd { .. } => {
+        // mdevd-coldplug -O waits for mdevd to process the final coldplug
+        // event.
+      },
     }
     Ok(())
   }
@@ -211,10 +317,13 @@ impl DeviceManager {
       Self::Mdev { mdev, .. } => {
         let _ = Command::new(mdev).arg("-s").status();
       },
+      Self::Mdevd { coldplug, .. } => {
+        let _ = Command::new(coldplug).args(["-O", "4"]).status();
+      },
     }
   }
 
-  fn stop(&self) {
+  fn stop(&mut self) {
     log_message("Stopping device manager...", true);
     match self {
       Self::Udev { udevadm, .. } => {
@@ -224,18 +333,42 @@ impl DeviceManager {
         let name = mdev.file_name().unwrap_or(mdev.as_os_str());
         let _ = Command::new("pkill").arg(name).status();
       },
+      Self::Mdevd { pid, .. } => {
+        if let Some(pid) = pid.take() {
+          unsafe {
+            libc::kill(pid, libc::SIGTERM);
+          }
+        }
+      },
     }
   }
 
   // Write /dev/root udev rule so systemd's mount-unit generator can find the
-  // root device. mdev does not process /run/udev/rules.d, so this is a no-op
-  // for that backend.
+  // root device. mdev-style managers do not process /run/udev/rules.d, so this
+  // is a no-op for those backends.
   fn write_dev_root_rule(&self, target_root: &Path) -> Result<()> {
     match self {
       Self::Udev { .. } => write_dev_root_udev_rule(target_root),
-      Self::Mdev { .. } => Ok(()),
+      Self::Mdev { .. } | Self::Mdevd { .. } => Ok(()),
     }
   }
+}
+
+fn install_mdev_conf(conf: Option<&Path>) -> Result<()> {
+  let Some(conf) = conf else {
+    return Ok(());
+  };
+
+  let dest = Path::new("/etc/mdev.conf");
+  fs::create_dir_all(dest.parent().unwrap())?;
+  fs::copy(conf, dest).with_context(|| {
+    format!(
+      "Failed to copy mdev.conf from {} to {}",
+      conf.display(),
+      dest.display()
+    )
+  })?;
+  Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -2536,7 +2669,7 @@ pub fn run(args: &[String]) -> Result<()> {
     }
   }
 
-  let config = parse_args(args);
+  let mut config = parse_args(args);
   let cmdline =
     KernelCmdline::parse().context("Failed to parse kernel command line")?;
 
