@@ -24,16 +24,10 @@ const ETC_STATIC: &str = "/etc/static";
 const ETC_MANIFEST_DEFAULT: &str = "/var/lib/nixos";
 const ETC_MANIFEST_ENV: &str = "NIXOS_CORE_STATE_DIR";
 
-fn get_etc_manifest() -> PathBuf {
+fn state_dir() -> PathBuf {
   let state_dir = std::env::var(ETC_MANIFEST_ENV)
     .unwrap_or_else(|_| ETC_MANIFEST_DEFAULT.to_string());
-  PathBuf::from(state_dir).join("etc-manifest.json")
-}
-
-fn get_direct_symlinks_state() -> PathBuf {
-  let state_dir = std::env::var(ETC_MANIFEST_ENV)
-    .unwrap_or_else(|_| ETC_MANIFEST_DEFAULT.to_string());
-  PathBuf::from(state_dir).join("etc-direct-symlinks.json")
+  PathBuf::from(state_dir)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -85,7 +79,8 @@ pub fn run(args: &[String]) -> Result<()> {
   .context("Failed to serialise manifest")?;
 
   // Step 5: Write to a sibling temp path so the rename in step 7 is atomic.
-  let manifest_path = get_etc_manifest();
+  let state_dir = state_dir();
+  let manifest_path = state_dir.join("etc-manifest.json");
   let manifest_tmp = PathBuf::from(format!("{}.new", manifest_path.display()));
   fs::create_dir_all(
     manifest_path
@@ -94,7 +89,7 @@ pub fn run(args: &[String]) -> Result<()> {
   )?;
   fs::write(&manifest_tmp, &manifest_content)
     .context("Failed to write manifest")?;
-  let direct_state_path = get_direct_symlinks_state();
+  let direct_state_path = state_dir.join("etc-direct-symlinks.json");
   let direct_state_tmp = write_direct_symlinks_state_tmp(
     &direct_state_path,
     &manifest.direct_symlinks,
