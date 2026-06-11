@@ -701,6 +701,7 @@ dependencies = [
  "clap",
  "libc",
  "log",
+ "serde",
  "serde_json",
  "smfh-core",
  "tempfile",

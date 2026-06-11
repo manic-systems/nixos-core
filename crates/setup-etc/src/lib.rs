@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{info, warn};
+use serde::{Deserialize, Serialize};
 use smfh_core::manifest::{File as ManifestFile, FileKind, Manifest};
 
 /// Update /etc from the current NixOS configuration
@@ -35,10 +36,16 @@ fn get_direct_symlinks_state() -> PathBuf {
   PathBuf::from(state_dir).join("etc-direct-symlinks.json")
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 struct DirectSymlink {
   source: PathBuf,
   target: PathBuf,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DirectSymlinkState {
+  version:         u8,
+  direct_symlinks: Vec<DirectSymlink>,
 }
 
 struct EtcManifest {
@@ -87,6 +94,12 @@ pub fn run(args: &[String]) -> Result<()> {
   )?;
   fs::write(&manifest_tmp, &manifest_content)
     .context("Failed to write manifest")?;
+  let direct_state_path = get_direct_symlinks_state();
+  let direct_state_tmp = write_direct_symlinks_state_tmp(
+    &direct_state_path,
+    &manifest.direct_symlinks,
+  )
+  .context("Failed to write direct symlink state")?;
 
   // Steps 6–7: diff and commit; clean up the temp file on any failure so we
   // do not leave a stale .new file behind.
@@ -101,17 +114,20 @@ pub fn run(args: &[String]) -> Result<()> {
       .diff(&manifest_path, "", true)
       .map_err(|e| anyhow::anyhow!("Failed to apply manifest diff: {e:?}"))?;
 
-    activate_direct_symlinks(&manifest.direct_symlinks)
+    activate_direct_symlinks(&manifest.direct_symlinks, &direct_state_path)
       .context("Failed to apply direct symlinks")?;
 
     // Step 7: Commit the new manifest atomically.
     fs::rename(&manifest_tmp, manifest_path)
-      .context("Failed to commit manifest")
+      .context("Failed to commit manifest")?;
+    fs::rename(&direct_state_tmp, &direct_state_path)
+      .context("Failed to commit direct symlink state")
   })();
 
   if let Err(ref e) = diff_result {
     warn!("manifest activation failed, cleaning up temp file: {e}");
     let _ = fs::remove_file(&manifest_tmp);
+    let _ = fs::remove_file(&direct_state_tmp);
   }
   diff_result?;
 
@@ -370,31 +386,13 @@ fn file_to_json(file: &ManifestFile) -> Result<serde_json::Value> {
   Ok(v)
 }
 
-fn direct_symlink_to_json(link: &DirectSymlink) -> serde_json::Value {
-  serde_json::json!({
-    "source": link.source,
-    "target": link.target,
-  })
-}
-
-fn direct_symlink_from_json(
-  value: &serde_json::Value,
-) -> Option<DirectSymlink> {
-  let source = value.get("source")?.as_str()?;
-  let target = value.get("target")?.as_str()?;
-  Some(DirectSymlink {
-    source: PathBuf::from(source),
-    target: PathBuf::from(target),
-  })
-}
-
 fn read_direct_symlinks_state(path: &Path) -> Vec<DirectSymlink> {
   let contents = match fs::read_to_string(path) {
     Ok(contents) => contents,
     Err(_) => return Vec::new(),
   };
-  let value: serde_json::Value = match serde_json::from_str(&contents) {
-    Ok(value) => value,
+  let state: DirectSymlinkState = match serde_json::from_str(&contents) {
+    Ok(state) => state,
     Err(e) => {
       warn!(
         "failed to parse direct symlink state {}: {e}",
@@ -403,21 +401,17 @@ fn read_direct_symlinks_state(path: &Path) -> Vec<DirectSymlink> {
       return Vec::new();
     },
   };
-  value
-    .get("direct_symlinks")
-    .and_then(|v| v.as_array())
-    .map(|links| links.iter().filter_map(direct_symlink_from_json).collect())
-    .unwrap_or_default()
+  state.direct_symlinks
 }
 
-fn write_direct_symlinks_state(
+fn write_direct_symlinks_state_tmp(
   path: &Path,
   links: &[DirectSymlink],
-) -> Result<()> {
-  let content = serde_json::to_string_pretty(&serde_json::json!({
-    "version": 1,
-    "direct_symlinks": links.iter().map(direct_symlink_to_json).collect::<Vec<_>>(),
-  }))
+) -> Result<PathBuf> {
+  let content = serde_json::to_string_pretty(&DirectSymlinkState {
+    version:         1,
+    direct_symlinks: links.to_vec(),
+  })
   .context("Failed to serialise direct symlink state")?;
 
   if let Some(parent) = path.parent() {
@@ -426,16 +420,17 @@ fn write_direct_symlinks_state(
 
   let tmp = PathBuf::from(format!("{}.new", path.display()));
   fs::write(&tmp, content)?;
-  fs::rename(&tmp, path)?;
-  Ok(())
+  Ok(tmp)
 }
 
-fn activate_direct_symlinks(links: &[DirectSymlink]) -> Result<()> {
-  let state_path = get_direct_symlinks_state();
+fn activate_direct_symlinks(
+  links: &[DirectSymlink],
+  state_path: &Path,
+) -> Result<()> {
   let current_targets: HashSet<PathBuf> =
     links.iter().map(|link| link.target.clone()).collect();
 
-  for old in read_direct_symlinks_state(&state_path) {
+  for old in read_direct_symlinks_state(state_path) {
     if current_targets.contains(&old.target) {
       continue;
     }
@@ -467,7 +462,6 @@ fn activate_direct_symlinks(links: &[DirectSymlink]) -> Result<()> {
     })?;
   }
 
-  write_direct_symlinks_state(&state_path, links)?;
   Ok(())
 }
 
