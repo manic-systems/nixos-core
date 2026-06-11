@@ -29,6 +29,23 @@ fn get_etc_manifest() -> PathBuf {
   PathBuf::from(state_dir).join("etc-manifest.json")
 }
 
+fn get_direct_symlinks_state() -> PathBuf {
+  let state_dir = std::env::var(ETC_MANIFEST_ENV)
+    .unwrap_or_else(|_| ETC_MANIFEST_DEFAULT.to_string());
+  PathBuf::from(state_dir).join("etc-direct-symlinks.json")
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct DirectSymlink {
+  source: PathBuf,
+  target: PathBuf,
+}
+
+struct EtcManifest {
+  files:           Vec<ManifestFile>,
+  direct_symlinks: Vec<DirectSymlink>,
+}
+
 /// Apply /etc files from the given nix store path, updating /etc/static and all
 /// derived symlinks.
 pub fn run(args: &[String]) -> Result<()> {
@@ -45,13 +62,16 @@ pub fn run(args: &[String]) -> Result<()> {
   remove_dangling_etc_symlinks(Path::new("/etc"))?;
 
   // Step 3: Walk the $etc tree and build a smfh manifest.
-  let files =
+  let manifest =
     build_etc_manifest(&etc, Path::new("/etc"), Path::new(ETC_STATIC))?;
 
   // Step 4: Serialise to JSON. permissions must be octal strings because
   // smfh-core's deserialize_octal only accepts Option<String>.
-  let files_json: Vec<serde_json::Value> =
-    files.iter().map(file_to_json).collect::<Result<Vec<_>>>()?;
+  let files_json: Vec<serde_json::Value> = manifest
+    .files
+    .iter()
+    .map(file_to_json)
+    .collect::<Result<Vec<_>>>()?;
   let manifest_content = serde_json::to_string_pretty(
     &serde_json::json!({"version": 1, "files": files_json}),
   )
@@ -81,6 +101,9 @@ pub fn run(args: &[String]) -> Result<()> {
       .diff(&manifest_path, "", true)
       .map_err(|e| anyhow::anyhow!("Failed to apply manifest diff: {e:?}"))?;
 
+    activate_direct_symlinks(&manifest.direct_symlinks)
+      .context("Failed to apply direct symlinks")?;
+
     // Step 7: Commit the new manifest atomically.
     fs::rename(&manifest_tmp, manifest_path)
       .context("Failed to commit manifest")
@@ -98,7 +121,12 @@ pub fn run(args: &[String]) -> Result<()> {
   // activated by smfh above and must not be deleted. Running after the manifest
   // commit means a failed activation leaves Perl-tracked files intact; the
   // migration retries cleanly on the next run.
-  let kept: HashSet<PathBuf> = files.iter().map(|f| f.target.clone()).collect();
+  let kept: HashSet<PathBuf> = manifest
+    .files
+    .iter()
+    .map(|f| f.target.clone())
+    .chain(manifest.direct_symlinks.iter().map(|f| f.target.clone()))
+    .collect();
   migrate_perl_clean_file(Path::new("/etc/.clean"), Path::new("/etc"), &kept);
 
   // Step 9: Ensure the /etc/NIXOS tag file exists.
@@ -114,8 +142,9 @@ fn build_etc_manifest(
   etc_store: &Path,
   etc_dir: &Path,
   etc_static: &Path,
-) -> Result<Vec<ManifestFile>> {
+) -> Result<EtcManifest> {
   let mut files: Vec<ManifestFile> = Vec::new();
+  let mut direct_symlinks: Vec<DirectSymlink> = Vec::new();
   // Use a manual stack to avoid recursion limits on deeply nested trees.
   let mut stack: Vec<PathBuf> = vec![etc_store.to_path_buf()];
 
@@ -213,17 +242,9 @@ fn build_etc_manifest(
             continue;
           },
         };
-        files.push(ManifestFile {
-          source: Some(link_target),
+        direct_symlinks.push(DirectSymlink {
+          source: link_target,
           target,
-          kind: FileKind::Symlink,
-          clobber: Some(true),
-          permissions: None,
-          uid: None,
-          gid: None,
-          deactivate: None,
-          follow_symlinks: None,
-          ignore_modification: None,
         });
       } else {
         // Numeric octal mode: copy the file with explicit uid/gid/mode.
@@ -332,7 +353,10 @@ fn build_etc_manifest(
     // also silently skips them.
   }
 
-  Ok(files)
+  Ok(EtcManifest {
+    files,
+    direct_symlinks,
+  })
 }
 
 /// Serialise a `ManifestFile` to a JSON value, writing `permissions` as an
@@ -344,6 +368,107 @@ fn file_to_json(file: &ManifestFile) -> Result<serde_json::Value> {
     v["permissions"] = serde_json::Value::String(format!("{perm:o}"));
   }
   Ok(v)
+}
+
+fn direct_symlink_to_json(link: &DirectSymlink) -> serde_json::Value {
+  serde_json::json!({
+    "source": link.source,
+    "target": link.target,
+  })
+}
+
+fn direct_symlink_from_json(
+  value: &serde_json::Value,
+) -> Option<DirectSymlink> {
+  let source = value.get("source")?.as_str()?;
+  let target = value.get("target")?.as_str()?;
+  Some(DirectSymlink {
+    source: PathBuf::from(source),
+    target: PathBuf::from(target),
+  })
+}
+
+fn read_direct_symlinks_state(path: &Path) -> Vec<DirectSymlink> {
+  let contents = match fs::read_to_string(path) {
+    Ok(contents) => contents,
+    Err(_) => return Vec::new(),
+  };
+  let value: serde_json::Value = match serde_json::from_str(&contents) {
+    Ok(value) => value,
+    Err(e) => {
+      warn!(
+        "failed to parse direct symlink state {}: {e}",
+        path.display()
+      );
+      return Vec::new();
+    },
+  };
+  value
+    .get("direct_symlinks")
+    .and_then(|v| v.as_array())
+    .map(|links| links.iter().filter_map(direct_symlink_from_json).collect())
+    .unwrap_or_default()
+}
+
+fn write_direct_symlinks_state(
+  path: &Path,
+  links: &[DirectSymlink],
+) -> Result<()> {
+  let content = serde_json::to_string_pretty(&serde_json::json!({
+    "version": 1,
+    "direct_symlinks": links.iter().map(direct_symlink_to_json).collect::<Vec<_>>(),
+  }))
+  .context("Failed to serialise direct symlink state")?;
+
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent)?;
+  }
+
+  let tmp = PathBuf::from(format!("{}.new", path.display()));
+  fs::write(&tmp, content)?;
+  fs::rename(&tmp, path)?;
+  Ok(())
+}
+
+fn activate_direct_symlinks(links: &[DirectSymlink]) -> Result<()> {
+  let state_path = get_direct_symlinks_state();
+  let current_targets: HashSet<PathBuf> =
+    links.iter().map(|link| link.target.clone()).collect();
+
+  for old in read_direct_symlinks_state(&state_path) {
+    if current_targets.contains(&old.target) {
+      continue;
+    }
+
+    match fs::read_link(&old.target) {
+      Ok(existing) if existing == old.source => {
+        info!("removing obsolete direct symlink {}", old.target.display());
+        fs::remove_file(&old.target).with_context(|| {
+          format!("Failed to remove obsolete symlink {}", old.target.display())
+        })?;
+      },
+      Ok(_) | Err(_) => {},
+    }
+  }
+
+  for link in links {
+    if let Some(parent) = link.target.parent() {
+      fs::create_dir_all(parent).with_context(|| {
+        format!("Failed to create parent dir for {}", link.target.display())
+      })?;
+    }
+
+    atomic_symlink(&link.source, &link.target).with_context(|| {
+      format!(
+        "Failed to create direct symlink {} -> {}",
+        link.target.display(),
+        link.source.display()
+      )
+    })?;
+  }
+
+  write_direct_symlinks_state(&state_path, links)?;
+  Ok(())
 }
 
 /// Read the legacy Perl `/etc/.clean` state file (one relative path per line),
@@ -568,7 +693,7 @@ mod tests {
     store_dir: &Path,
     etc_dir: &Path,
     static_dir: &Path,
-  ) -> Vec<ManifestFile> {
+  ) -> EtcManifest {
     build_etc_manifest(store_dir, etc_dir, static_dir).unwrap()
   }
 
@@ -585,9 +710,10 @@ mod tests {
     // A symlink in the store without a .mode sidecar → pass-through symlink
     symlink("/nix/store/irrelevant", store.join("hostname")).unwrap();
 
-    let files = manifest_for(&store, &etc, &stat);
-    assert_eq!(files.len(), 1);
-    let f = &files[0];
+    let manifest = manifest_for(&store, &etc, &stat);
+    assert_eq!(manifest.files.len(), 1);
+    assert!(manifest.direct_symlinks.is_empty());
+    let f = &manifest.files[0];
     assert_eq!(f.kind, FileKind::Symlink);
     assert_eq!(f.target, etc.join("hostname"));
     assert_eq!(f.source, Some(stat.join("hostname")));
@@ -610,12 +736,12 @@ mod tests {
     symlink(&nix_target, store.join("shells")).unwrap();
     fs::write(store.join("shells.mode"), "direct-symlink").unwrap();
 
-    let files = manifest_for(&store, &etc, &stat);
-    assert_eq!(files.len(), 1);
-    let f = &files[0];
-    assert_eq!(f.kind, FileKind::Symlink);
-    assert_eq!(f.source, Some(nix_target));
-    assert_eq!(f.target, etc.join("shells"));
+    let manifest = manifest_for(&store, &etc, &stat);
+    assert!(manifest.files.is_empty());
+    assert_eq!(manifest.direct_symlinks, vec![DirectSymlink {
+      source: nix_target,
+      target: etc.join("shells"),
+    }]);
   }
 
   #[test]
@@ -635,9 +761,10 @@ mod tests {
     fs::write(stat.join("secret"), "sensitive").unwrap();
     // No .uid/.gid files → both default to 0
 
-    let files = manifest_for(&store, &etc, &stat);
-    assert_eq!(files.len(), 1);
-    let f = &files[0];
+    let manifest = manifest_for(&store, &etc, &stat);
+    assert_eq!(manifest.files.len(), 1);
+    assert!(manifest.direct_symlinks.is_empty());
+    let f = &manifest.files[0];
     assert_eq!(f.kind, FileKind::Copy);
     assert_eq!(f.permissions, Some(0o600));
     assert_eq!(f.uid, Some(0));
