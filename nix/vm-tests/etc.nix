@@ -30,6 +30,7 @@ mkTest ({nodes, ...}: {
       imports = [nixosModule testCommons];
       system.nixos-core.enable = true;
       boot.loader.grub.enable = false;
+      time.timeZone = "Asia/Almaty";
 
       environment.etc = {
         "nixos-core-marker".text = "nixos-core-works";
@@ -140,15 +141,24 @@ mkTest ({nodes, ...}: {
       machine.succeed("readlink /etc/nixos-core-direct | grep -q '^/nix/store/'")
       machine.succeed("readlink /etc/nixos-core-direct | grep -qv /etc/static")
 
+    with subtest("timezone direct symlink resolves on first boot"):
+      machine.succeed("test -L /etc/localtime")
+      machine.succeed("readlink /etc/localtime | grep -qx /etc/zoneinfo/Asia/Almaty")
+      machine.succeed("test -e /etc/zoneinfo/Asia/Almaty")
+
     with subtest("infrastructure files written"):
       machine.succeed("test -f /var/lib/nixos/etc-manifest.json")
+      machine.succeed("test -f /var/lib/nixos/etc-direct-symlinks.json")
       machine.succeed("test -f /etc/NIXOS")
 
     with subtest("manifest contains expected entries"):
       machine.succeed("grep -q nixos-core-marker /var/lib/nixos/etc-manifest.json")
       machine.succeed("grep -q nixos-core-secret /var/lib/nixos/etc-manifest.json")
       machine.succeed("grep -q nixos-core-source /var/lib/nixos/etc-manifest.json")
-      machine.succeed("grep -q nixos-core-direct /var/lib/nixos/etc-manifest.json")
+
+    with subtest("direct symlink state contains expected entries"):
+      machine.succeed("grep -q nixos-core-direct /var/lib/nixos/etc-direct-symlinks.json")
+      machine.succeed("grep -q localtime /var/lib/nixos/etc-direct-symlinks.json")
 
     with subtest("idempotent re-activation"):
       machine.execute("/run/current-system/activate")
@@ -156,6 +166,7 @@ mkTest ({nodes, ...}: {
       machine.succeed("grep -qx sensitive /etc/nixos-core-secret")
       machine.succeed("stat -c '%a' /etc/nixos-core-secret | grep -qx 600")
       machine.succeed("test -f /var/lib/nixos/etc-manifest.json")
+      machine.succeed("readlink /etc/localtime | grep -qx /etc/zoneinfo/Asia/Almaty")
 
     ## Perl-to-nixos-core migration
     with subtest("Perl-based activation populated /etc"):
@@ -218,7 +229,9 @@ mkTest ({nodes, ...}: {
     with subtest("manifest mentions migrated entries"):
       perl.succeed("grep -q perl-migration-marker /var/lib/nixos/etc-manifest.json")
       perl.succeed("grep -q perl-migration-secret /var/lib/nixos/etc-manifest.json")
-      perl.succeed("grep -q perl-migration-direct /var/lib/nixos/etc-manifest.json")
+
+    with subtest("direct symlink state mentions migrated entries"):
+      perl.succeed("grep -q perl-migration-direct /var/lib/nixos/etc-direct-symlinks.json")
 
     with subtest("idempotent re-activation under nixos-core"):
       perl.execute("/run/current-system/activate")
@@ -227,5 +240,6 @@ mkTest ({nodes, ...}: {
       perl.succeed("grep -qx from-perl /etc/perl-migration-marker")
       perl.succeed("grep -qx secret-content /etc/perl-migration-secret")
       perl.succeed("stat -c '%a' /etc/perl-migration-secret | grep -qx 600")
+      perl.succeed("test -f /var/lib/nixos/etc-direct-symlinks.json")
   '';
 })
