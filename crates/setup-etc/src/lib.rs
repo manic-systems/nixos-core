@@ -11,6 +11,8 @@ use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use smfh_core::manifest::{File as ManifestFile, FileKind, Manifest};
 
+mod manifest_diff;
+
 /// Update /etc from the current NixOS configuration
 #[derive(Parser, Debug)]
 #[command(name = "setup-etc")]
@@ -95,6 +97,9 @@ pub fn run(args: &[String]) -> Result<()> {
     &manifest.direct_symlinks,
   )
   .context("Failed to write direct symlink state")?;
+  let manifest_diff_base =
+    manifest_diff::DiffBase::prepare(&manifest_path, &manifest.direct_symlinks)
+      .context("Failed to prepare manifest diff base")?;
 
   // Steps 6–7: diff and commit; clean up the temp file on any failure so we
   // do not leave a stale .new file behind.
@@ -106,14 +111,14 @@ pub fn run(args: &[String]) -> Result<()> {
       .map_err(|e| anyhow::anyhow!("Failed to parse manifest: {e:?}"))?;
 
     new_manifest
-      .diff(&manifest_path, "", true)
+      .diff(manifest_diff_base.path(), "", true)
       .map_err(|e| anyhow::anyhow!("Failed to apply manifest diff: {e:?}"))?;
 
     activate_direct_symlinks(&manifest.direct_symlinks, &direct_state_path)
       .context("Failed to apply direct symlinks")?;
 
     // Step 7: Commit the new manifest atomically.
-    fs::rename(&manifest_tmp, manifest_path)
+    fs::rename(&manifest_tmp, &manifest_path)
       .context("Failed to commit manifest")?;
     fs::rename(&direct_state_tmp, &direct_state_path)
       .context("Failed to commit direct symlink state")
