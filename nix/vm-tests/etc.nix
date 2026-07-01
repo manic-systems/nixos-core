@@ -5,6 +5,19 @@
   testCommons,
   writeText,
 }:
+let
+  oldDirectSymlinkManifest = writeText "old-direct-symlink-manifest.json" (builtins.toJSON {
+    version = 1;
+    files = [
+      {
+        source = "/proc/mounts";
+        target = "/etc/mtab";
+        type = "symlink";
+        clobber = true;
+      }
+    ];
+  });
+in
 mkTest ({nodes, ...}: {
   name = "nixos-core-etc";
   nodes = {
@@ -159,6 +172,16 @@ mkTest ({nodes, ...}: {
     with subtest("direct symlink state contains expected entries"):
       machine.succeed("grep -q nixos-core-direct /var/lib/nixos/etc-direct-symlinks.json")
       machine.succeed("grep -q localtime /var/lib/nixos/etc-direct-symlinks.json")
+
+    with subtest("old smfh direct-symlink manifest migrates without deactivating mtab"):
+      machine.succeed("cp ${oldDirectSymlinkManifest} /var/lib/nixos/etc-manifest.json")
+      machine.succeed("rm -f /etc/mtab && ln -s /proc/999999999/mounts /etc/mtab")
+      machine.fail("test -e /proc/999999999/mounts")
+      machine.succeed("/run/current-system/activate")
+      machine.succeed("test -L /etc/mtab")
+      machine.succeed("readlink /etc/mtab | grep -qx /proc/mounts")
+      machine.succeed("grep -q '\"target\": \"/etc/mtab\"' /var/lib/nixos/etc-direct-symlinks.json")
+      machine.fail("grep -q '\"target\": \"/etc/mtab\"' /var/lib/nixos/etc-manifest.json")
 
     with subtest("idempotent re-activation"):
       machine.execute("/run/current-system/activate")
