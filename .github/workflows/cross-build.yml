@@ -11,7 +11,7 @@ jobs:
     name: musl cross-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - name: Build nixos-core-musl
         run: nix build .#nixos-core-musl -L
