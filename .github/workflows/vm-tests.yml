@@ -13,7 +13,7 @@ jobs:
     outputs:
       tests: ${{ steps.list.outputs.tests }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - id: list
         run: |
@@ -29,7 +29,7 @@ jobs:
       matrix:
         test: ${{ fromJson(needs.discover.outputs.tests) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
       - name: Build ${{ matrix.test }} test
         run: nix build .#checks.x86_64-linux.${{ matrix.test }} -Lv
