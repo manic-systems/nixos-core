@@ -508,6 +508,7 @@ dependencies = [
  "env_logger",
  "init-script",
  "log",
+ "persistence",
  "setup-etc",
  "stage1",
  "stage2",
@@ -550,6 +551,20 @@ name = "owo-colors"
 version = "4.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
+
+[[package]]
+name = "persistence"
+version = "1.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "libc",
+ "log",
+ "nix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "pin-project-lite"

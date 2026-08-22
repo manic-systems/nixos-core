@@ -1,0 +1,25 @@
+[package]
+name                   = "persistence"
+description            = "Filesystem-neutral persistent path projection"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+readme                 = "README.md"
+
+[lib]
+name = "persistence"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace            = true
+clap.workspace              = true
+libc.workspace              = true
+log.workspace               = true
+nix.workspace               = true
+serde.workspace             = true
+serde_json.workspace        = true
+
+[dev-dependencies]
+tempfile.workspace = true
