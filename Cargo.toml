@@ -13,6 +13,7 @@ version      = "1.0.1"
 # Internal components
 activation-common   = { path = "./crates/activation-common", version = "1.0.1" }
 init-script         = { path = "./crates/init-script", version = "1.0.1" }
+persistence         = { path = "./crates/persistence", version = "1.0.1" }
 setup-etc           = { path = "./crates/setup-etc", version = "1.0.1" }
 stage1              = { path = "./crates/stage1", version = "1.0.1" }
 stage2              = { path = "./crates/stage2", version = "1.0.1" }

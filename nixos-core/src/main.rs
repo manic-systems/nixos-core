@@ -53,6 +53,7 @@ fn init_logger() {
       "update_users_groups",
       "init_script",
       "activation_common",
+      "persistence",
     ] {
       builder.filter(Some(crate_name), level);
     }
@@ -71,6 +72,7 @@ fn init_logger() {
 }
 
 fn dispatch(command: &str, args: &[String]) -> Result<()> {
+  let _ = args;
   match command {
     #[cfg(feature = "update-users-groups")]
     "update-users-groups" => update_users_groups::run(args),
@@ -80,6 +82,9 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
 
     #[cfg(feature = "init-script")]
     "init-script" | "init-script-builder" => init_script::run(args),
+
+    #[cfg(feature = "persistence")]
+    "persist" => persistence::run(args),
 
     #[cfg(feature = "stage-1")]
     "stage-1-init" => stage1::run(args),
@@ -106,6 +111,10 @@ fn print_usage() {
   #[cfg(feature = "init-script")]
   eprintln!(
     "  init-script           Create the generic /sbin/init fallback script"
+  );
+  #[cfg(feature = "persistence")]
+  eprintln!(
+    "  persist               Project persistent paths into the live root"
   );
   #[cfg(feature = "stage-1")]
   eprintln!(

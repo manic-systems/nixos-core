@@ -5,6 +5,7 @@
   withUpdateUsersGroups ? true,
   withSetupEtc ? true,
   withInitScript ? true,
+  withPersistence ? true,
   withStage1 ? true,
   withStage2 ? true,
   # Features to enable for stage2 library
@@ -16,6 +17,7 @@
     optional withUpdateUsersGroups "update-users-groups"
     ++ optional withSetupEtc "setup-etc"
     ++ optional withInitScript "init-script"
+    ++ optional withPersistence "persistence"
     ++ optional withStage1 "stage-1"
     ++ optional withStage2 "stage-2";
 
@@ -29,6 +31,7 @@
     optional withUpdateUsersGroups "update-users-groups"
     ++ optional withSetupEtc "setup-etc"
     ++ optional withInitScript "init-script-builder"
+    ++ optional withPersistence "persist"
     ++ optional withStage1 "stage-1-init"
     ++ optional withStage2 "stage-2-init"
   );
@@ -53,6 +56,7 @@ in
 
     cargoLock.lockFile = ../Cargo.lock;
 
+    buildNoDefaultFeatures = true;
     buildFeatures = allFeatures;
 
     installPhase = ''
