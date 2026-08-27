@@ -7,10 +7,10 @@
   inherit (builtins) toJSON;
   inherit (lib.options) mkOption mkEnableOption;
   inherit (lib.modules) mkIf;
-  inherit (lib.types) attrsOf bool coercedTo enum listOf nullOr str strMatching submodule;
+  inherit (lib.types) attrsOf bool coercedTo enum listOf nullOr str strMatching submodule either;
   inherit (lib.strings) hasInfix hasPrefix removePrefix removeSuffix;
   inherit (lib.attrsets) hasAttr attrNames mapAttrsToList;
-  inherit (lib.lists) all concatLists filter unique any;
+  inherit (lib.lists) all concatLists filter unique any isList;
   inherit (lib.meta) getExe';
 
   cfg = config.system.nixos-core;
@@ -111,7 +111,7 @@
       kind = "file";
     })
     entryType;
-  userStoreType = coercedTo (listOf entryType') (entries: {inherit entries;}) (submodule {
+  userStoreType = either (listOf entryType') (submodule {
     options = {
       entries = mkOption {
         type = listOf entryType';
@@ -175,6 +175,14 @@
     && !(hasInfix "/../" "/${path}/")
     && !(hasInfix "/./" "/${path}/");
   join = left: right: "${removeSuffix "/" left}/${removePrefix "/" right}";
+  userEntries = value:
+    if isList value
+    then {
+      entries = value;
+      directories = [];
+      files = [];
+    }
+    else value;
 
   normalizeEntry = store: user: entry: let
     isUser = user != null;
@@ -239,7 +247,9 @@
         ++ map (normalizeEntry store null) storeConfig.directories
         ++ map (normalizeEntry store null) storeConfig.files
         ++ concatLists (mapAttrsToList (
-            user: userConfig:
+            user: value: let
+              userConfig = userEntries value;
+            in
               map (normalizeEntry store user) userConfig.entries
               ++ map (normalizeEntry store user) userConfig.directories
               ++ map (normalizeEntry store user) userConfig.files
@@ -260,7 +270,7 @@
         store.entries
         ++ store.directories
         ++ store.files
-        ++ concatLists (mapAttrsToList (_: user: user.entries ++ user.directories ++ user.files) store.users)
+        ++ concatLists (mapAttrsToList (_: value: let user = userEntries value; in user.entries ++ user.directories ++ user.files) store.users)
     )
     persistenceCfg.stores);
   invalidSystemTargets = concatLists (mapAttrsToList (
@@ -271,7 +281,9 @@
   invalidUserTargets = concatLists (mapAttrsToList (
       _: store:
         concatLists (mapAttrsToList (
-            _: user:
+            _: value: let
+              user = userEntries value;
+            in
               map (entry: entry.target) (filter (entry: !normalizedRelative entry.target) (user.entries ++ user.directories ++ user.files))
           )
           store.users)
