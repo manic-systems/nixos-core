@@ -10,7 +10,7 @@
   inherit (lib.types) attrsOf bool coercedTo enum listOf nullOr str strMatching submodule either;
   inherit (lib.strings) hasInfix hasPrefix removePrefix removeSuffix;
   inherit (lib.attrsets) hasAttr attrNames mapAttrsToList;
-  inherit (lib.lists) all concatLists filter unique any isList;
+  inherit (lib.lists) all concatLists filter unique any isList length;
   inherit (lib.meta) getExe';
 
   cfg = config.system.nixos-core;
@@ -21,26 +21,26 @@
       enable = mkOption {
         type = bool;
         default = false;
-        description = "Whether to apply the entry metadata defaults to the source and target parent directories.";
+        description = "Whether to apply this metadata to the source and target parent directories when nixos-core creates them.";
       };
 
       owner = mkOption {
         type = nullOr str;
         default = null;
-        description = "User name or numeric uid applied to both parent directories.";
+        description = "User name or numeric uid applied to both parent directories on creation.";
       };
 
       group = mkOption {
         type = nullOr str;
         default = null;
-        description = "Group name or numeric gid applied to both parent directories.";
+        description = "Group name or numeric gid applied to both parent directories on creation.";
       };
 
       mode = mkOption {
         type = nullOr (strMatching "[0-7]{3,4}");
         default = null;
         example = "0700";
-        description = "Octal mode applied to both parent directories.";
+        description = "Octal mode applied to both parent directories on creation.";
       };
     };
   };
@@ -73,32 +73,32 @@
       manageMetadata = mkOption {
         type = bool;
         default = true;
-        description = "Whether nixos-core applies ownership and mode. Disable this for filesystems without Unix metadata.";
+        description = "Whether nixos-core applies ownership and mode to objects it creates in the store. Disable this for stores without Unix metadata.";
       };
 
       owner = mkOption {
         type = nullOr str;
         default = null;
-        description = "User name or numeric uid applied to the persistent object.";
+        description = "User name or numeric uid applied to the persistent object when nixos-core creates it.";
       };
 
       group = mkOption {
         type = nullOr str;
         default = null;
-        description = "Group name or numeric gid applied to the persistent object.";
+        description = "Group name or numeric gid applied to the persistent object when nixos-core creates it.";
       };
 
       mode = mkOption {
         type = nullOr (strMatching "[0-7]{3,4}");
         default = null;
         example = "0700";
-        description = "Octal mode applied to the persistent object.";
+        description = "Octal mode applied to the persistent object when nixos-core creates it.";
       };
 
       parent = mkOption {
         type = parentType;
         default = {};
-        description = "Metadata for the immediate source and target parent directories.";
+        description = "Metadata for the immediate source and target parent directories. Other missing parents copy their counterpart on the opposite side, or inherit the owner of the directory they are created in.";
       };
     };
   };
@@ -144,14 +144,14 @@
       directories = mkOption {
         type = listOf directoryType;
         default = [];
-        example = ["/var/lib/nixos"];
+        example = ["/var/lib/bluetooth"];
         description = "System directories backed by this store.";
       };
 
       files = mkOption {
         type = listOf fileType;
         default = [];
-        example = ["/etc/machine-id"];
+        example = ["/etc/ssh/ssh_host_ed25519_key"];
         description = "System files backed by this store.";
       };
 
@@ -221,7 +221,7 @@
   in {
     inherit store target;
     source = join store sourceRelative;
-    inherit (entry) kind method;
+    inherit (entry) kind method manageMetadata;
     owner = metadataValue entry.owner defaultOwner;
     group = metadataValue entry.group defaultGroup;
     mode = metadataValue entry.mode (
@@ -275,7 +275,7 @@
     persistenceCfg.stores);
   invalidSystemTargets = concatLists (mapAttrsToList (
       _: store:
-        map (entry: entry.target) (filter (entry: !isAbsolute entry.target) store.entries)
+        map (entry: entry.target) (filter (entry: !isAbsolute entry.target) (store.entries ++ store.directories ++ store.files))
     )
     persistenceCfg.stores);
   invalidUserTargets = concatLists (mapAttrsToList (
@@ -299,13 +299,18 @@
     == "/"
     || path == parent
     || hasPrefix "${removeSuffix "/" parent}/" path;
-  mountPaths = unique (stores ++ map (entry: entry.target) normalizedEntries);
+  mountPaths = unique (stores ++ map (entry: dirOf entry.target) normalizedEntries);
 
   pathsOverlap = left: right: pathContains left right || pathContains right left;
   overlappingTargets = map (entry: entry.target) (filter (
       entry: any (store: pathsOverlap entry.target store) stores
     )
     normalizedEntries);
+  targets = map (entry: entry.target) normalizedEntries;
+  duplicateTargets = filter (target: length (filter (other: other == target) targets) > 1) (unique targets);
+  symlinkTargets = map (entry: entry.target) (filter (entry: entry.method == "symlink") normalizedEntries);
+  nestedTargets = filter (target: any (parent: parent != target && pathContains parent target) symlinkTargets) targets;
+  stateOverlaps = filter (path: pathsOverlap path "/run/nixos-core") (targets ++ map (entry: entry.source) normalizedEntries);
 in {
   options.system.nixos-core.persistence = {
     enable = mkEnableOption "filesystem-neutral persistent path projection";
@@ -314,9 +319,9 @@ in {
       default = {};
       example."/persist" = {
         entries = [
-          "/var/lib/nixos"
+          "/var/lib/bluetooth"
           {
-            target = "/etc/machine-id";
+            target = "/etc/ssh/ssh_host_ed25519_key";
             kind = "file";
           }
         ];
@@ -341,7 +346,7 @@ in {
       wantedBy = ["sysinit.target"];
       before = ["sysinit.target"];
       after = ["local-fs.target"];
-      reloadTriggers = [plan];
+      reloadIfChanged = true;
       unitConfig = {
         DefaultDependencies = false;
         RequiresMountsFor = mountPaths;
@@ -352,7 +357,7 @@ in {
         RemainAfterExit = true;
         ExecStart = ["${getExe' cfg.package "persist"} ${plan}"];
         ExecReload = ["${getExe' cfg.package "persist"} ${plan}"];
-        ExecStop = ["${getExe' cfg.package "persist"} ${plan} --clear"];
+        ExecStop = ["${getExe' cfg.package "persist"} --clear"];
       };
     };
 
@@ -380,6 +385,18 @@ in {
       {
         assertion = overlappingTargets == [];
         message = "nixos-core persistence targets cannot contain, equal, or be contained by a store: ${toJSON overlappingTargets}";
+      }
+      {
+        assertion = duplicateTargets == [];
+        message = "nixos-core persistence targets must be unique: ${toJSON duplicateTargets}";
+      }
+      {
+        assertion = nestedTargets == [];
+        message = "nixos-core persistence targets cannot sit below a symlink target: ${toJSON nestedTargets}";
+      }
+      {
+        assertion = stateOverlaps == [];
+        message = "nixos-core persistence paths cannot overlap /run/nixos-core: ${toJSON stateOverlaps}";
       }
       {
         assertion = all (user: hasAttr user config.users.users) userNames;
