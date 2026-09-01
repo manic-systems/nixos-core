@@ -286,6 +286,8 @@ self: {
       config.boot.initrd.extraFiles;
   };
 in {
+  imports = [./persistence.nix];
+
   options.system.nixos-core = {
     enable = mkEnableOption "nixos-core multi-call binary";
     package = mkPackageOption pkgsWithOverlay "nixos-core" {

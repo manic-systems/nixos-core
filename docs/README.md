@@ -32,7 +32,7 @@
     scripts _can_ be replaced through various means (such as the Perlless and
     Bashless profiles in Nixpkgs) the available methods usually change how your
     system behaves, and may yield general instability or even breakage as is the
-    case with the `/etc` overlay system.
+    case with the <code>/etc</code> overlay system.
 </div>
 
 <div align="center">
@@ -45,12 +45,14 @@
 
 ## Synopsis
 
-This monorepository provides a multi-call [^1] Rust binary to replace some of
-these fragile scripts, and in some cases utilities _already_ written in Rust.
-See the [motivation section](#motivation) for why we also try to replace Rust
-code with more Rust code.
-
 [here]: https://github.com/orangecms/multicall/blob/main/README.md
+
+This repository provides a multi-call [^1] Rust binary that aims to replace some
+of the fragile and occasionally undesirable Bash, Perl and Python scripts as
+well as _some_ utilities that were _already_ written in Rust in a fast, portable
+and easy-to-audit codebase. See the [motivation section](#motivation) for why we
+also try to replace Rust code with more Rust code, or why this repository exists
+in the first place.
 
 <!--markdownlint-disable MD059-->
 
@@ -58,18 +60,27 @@ code with more Rust code.
     to be executed through a single executable, depending on the name used to
     invoke it. See [here] for a more comprehensive explanation. Historically
     multicall binaries have also been called "BusyBox-like", which should
-    _probably_ be what you're thinking of for the purposes of this project.
+    _probably_ be what you're thinking of when you hear "multi-call" for the
+    purposes of this project.
 
 <!--markdownlint-enable MD059-->
 
 The NixOS module and the `nixos-core` crate replaces legacy Bash and Perl
-scripts that execute on every NixOS system during boot and activation. The
-multi-call binary design, like BusyBox, reduces binary size and simplifies
-deployment. The project is intentionally modular to fit the particular needs of
-any user through the [NixOS module](./nix/modules/nixos.nix) and
+scripts that execute on every NixOS system during boot and activation. While the
+amount of Bash and Perl has been steadily decreasing in Nixpkgs, non-Systemd
+spins of NixOS don't always get the same luxury. Thus, nixos-core aims to be the
+one-size-fits-all that you can use on both NixOS and spins of NixOS requiring a
+solution to those common problems.
+
+The multi-call design of `nixos-core`, like BusyBox, reduces binary size and
+simplifies deployment so that it can fit on your NixOS or NixOS-like system. The
+project is intentionally modular to fit the particular needs of any user through
+the [NixOS module](./nix/modules/nixos.nix) and
 [feature flags](#feature-flagsoverrides).
 
 ## Compatibility Matrix/Overview
+
+[Impermanence]: https://github.com/nix-community/impermanence
 
 The scope of this program is currently limited to what Nixpkgs permits in terms
 of replacing the legacy solutions _cleanly_ through the module system. Here is a
@@ -77,13 +88,14 @@ general overview of what can currently be replaced:
 
 <!--markdownlint-disable MD013-->
 
-| Command               | Original Script          | Purpose                                           | Status      |
+| Command               | Original Component       | Purpose                                           | Status      |
 | --------------------- | ------------------------ | ------------------------------------------------- | ----------- |
 | `update-users-groups` | `update-users-groups.pl` | Manage `/etc/passwd`, `/etc/group`, `/etc/shadow` | First-class |
 | `setup-etc`           | `setup-etc.pl`           | Atomically update `/etc/static`                   | First-class |
 | `init-script-builder` | `init-script-builder.sh` | Create generic `/sbin/init`                       | First-class |
 | `stage-1-init`        | `stage-1-init.sh`        | Initrd bootstrap                                  | First-class |
 | `stage-2-init`        | `stage-2-init.sh`        | System activation                                 | First-class |
+| `persist`             | [Impermanence]           | Project persistent paths into an ephemeral root   | First-class |
 
 <!--markdownlint-enable MD013-->
 
@@ -151,12 +163,13 @@ these features are described in detail in the [`stage2` crate's README].
 `nixos-core` aims to be a safe, independent core utility for NixOS and NixOS
 derivatives that build their own tooling from scratch, such as [MicrOS] and
 [Finix]. The main goals of this project is being a fast, portable and consistent
-utilities written in clean Rust, modular enough through feature flags and NixOS
-module knobs to fit into any system and derivative project. It is an out-of-tree
-module to meet those goals without the behavioral changes imposed by Nixpkgs
-alternatives like Userborn or nixos-init. That is not to say those are
-fundamentally incompatible with this project, but they are _different_. There
-may be room for collaboration in the future.
+utilities written in clean Rust, from one coherent codebase, and designed
+modular enough through feature flags and NixOS module knobs to fit into any
+system and derivative project. It is an out-of-tree module to meet those goals
+without the behavioral changes imposed by Nixpkgs alternatives like Userborn,
+the `/etc` overlay, or nixos-init. That is not to say those are fundamentally
+incompatible with this project, but they are _different_. There may be room for
+collaboration in the future.
 
 ## Contributing
 
@@ -193,7 +206,17 @@ $ nix build .#checks.x86_64-linux.boot
 
 You can find the available NixOS VM tests in the [nix/vm-tests](./nix/vm-tests/)
 directory. If you're adding new features, you should add a new test component or
-some subtests that verify that your code works exactly as expected.
+some subtests that verify that your code works exactly as expected. There is
+also this neat little command you can use to get a list of checks supported by
+each system:
+
+```sh
+# Get a list of checks supported by each system. For now all systems
+# support the same group of checks, but it might differ in the future.
+$ nix eval .#checks --apply 'x: builtins.mapAttrs (_: builtins.attrNames) x' --json
+```
+
+Pipe it into `jq` for a nicer result.
 
 ## License
 
