@@ -8,6 +8,7 @@ use std::{
     unix::{ffi::OsStrExt, fs::MetadataExt},
   },
   path::{Component, Path, PathBuf},
+  process::{Command, id},
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -57,6 +58,8 @@ struct Entry {
   target:          PathBuf,
   kind:            Kind,
   method:          Method,
+  #[serde(default)]
+  mount_options:   Vec<String>,
   #[serde(default = "default_true")]
   manage_metadata: bool,
   /// Whether this run or a recorded one created the bind target, so removal
@@ -649,6 +652,7 @@ fn same_projection(left: &Entry, right: &Entry) -> bool {
     && left.target == right.target
     && left.kind == right.kind
     && left.method == right.method
+    && left.mount_options == right.mount_options
 }
 
 fn is_mount_node(node: &Node) -> bool {
@@ -971,7 +975,40 @@ fn bind(root: &Root, entry: &Entry) -> Result<bool> {
     let _ = umount2(&target_path, MntFlags::empty());
     return Err(error);
   }
+  let mounted =
+    root
+      .open_node(&entry.target, entry.kind)?
+      .with_context(|| {
+        format!(
+          "Target {} disappeared before applying mount options",
+          entry.target.display()
+        )
+      })?;
+  if let Err(error) = apply_mount_options(entry, &mounted) {
+    drop(target);
+    let _ = umount2(&target_path, MntFlags::empty());
+    return Err(error);
+  }
   Ok(true)
+}
+
+fn apply_mount_options(entry: &Entry, target: &Node) -> Result<()> {
+  if entry.mount_options.is_empty() {
+    return Ok(());
+  }
+  let options = format!("remount,bind,{}", entry.mount_options.join(","));
+  let target = format!("/proc/{}/fd/{}", id(), target.fd.as_raw_fd());
+  let output = Command::new("mount")
+    .args(["-o", &options, &target])
+    .output()
+    .context("Failed to run mount for bind projection options")?;
+  ensure!(
+    output.status.success(),
+    "Failed to apply mount options to {}: {}",
+    entry.target.display(),
+    String::from_utf8_lossy(&output.stderr).trim()
+  );
+  Ok(())
 }
 
 fn same_node(source: &Node, target: &Node) -> Result<bool> {
@@ -1360,6 +1397,7 @@ mod tests {
       target: PathBuf::from(target),
       kind,
       method,
+      mount_options: Vec::new(),
       manage_metadata: true,
       placeholder: false,
       owner: None,
@@ -1518,6 +1556,21 @@ mod tests {
     inherit_placeholders(&mut plan, std::slice::from_ref(&recorded));
     assert!(plan[0].placeholder);
     assert!(!plan[1].placeholder);
+  }
+
+  #[test]
+  fn mount_option_changes_replace_a_projection() {
+    let previous = entry(
+      "/persist",
+      "/persist/a",
+      "/target",
+      Kind::Directory,
+      Method::Bind,
+    );
+    let mut current = previous.clone();
+    current.mount_options = vec!["noexec".into()];
+
+    assert_eq!(stale_entries(&[previous], &[current]).len(), 1);
   }
 
   #[test]
