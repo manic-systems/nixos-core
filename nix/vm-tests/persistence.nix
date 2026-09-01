@@ -21,6 +21,7 @@ in
           persistence = {
             enable = true;
             stores."/persist" = {
+              commonMountOptions = ["x-gvfs-hide"];
               entries = [
                 {
                   target = "/var/lib/core-state";
@@ -31,6 +32,7 @@ in
                 {
                   target = "/srv/core-state";
                   manageMetadata = false;
+                  mountOptions = ["exec"];
                 }
                 {
                   target = "/etc/core-id";
