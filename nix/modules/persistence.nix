@@ -70,6 +70,13 @@
         description = "Whether to project the persistent object with a bind mount or symbolic link.";
       };
 
+      mountOptions = mkOption {
+        type = listOf str;
+        default = [];
+        example = ["exec" "x-gvfs-hide"];
+        description = "Mount options applied to this bind projection. They have no effect on symbolic links.";
+      };
+
       manageMetadata = mkOption {
         type = bool;
         default = true;
@@ -164,6 +171,16 @@
         };
         description = "Home-relative files and directories backed by this store, grouped by NixOS user name.";
       };
+
+      commonMountOptions = mkOption {
+        type = listOf str;
+        default = [];
+        example = ["x-gvfs-hide"];
+        description = ''
+          Mount options applied to every bind projection from this store. Entry
+          `mountOptions` are appended, so later conflicting options take precedence.
+        '';
+      };
     };
   };
 
@@ -184,7 +201,7 @@
     }
     else value;
 
-  normalizeEntry = store: user: entry: let
+  normalizeEntry = store: storeConfig: user: entry: let
     isUser = user != null;
     userConfig =
       if isUser
@@ -222,6 +239,7 @@
     inherit store target;
     source = join store sourceRelative;
     inherit (entry) kind method manageMetadata;
+    mountOptions = unique (storeConfig.commonMountOptions ++ entry.mountOptions);
     owner = metadataValue entry.owner defaultOwner;
     group = metadataValue entry.group defaultGroup;
     mode = metadataValue entry.mode (
@@ -243,16 +261,16 @@
 
   normalizedEntries = concatLists (mapAttrsToList (
       store: storeConfig:
-        map (normalizeEntry store null) storeConfig.entries
-        ++ map (normalizeEntry store null) storeConfig.directories
-        ++ map (normalizeEntry store null) storeConfig.files
+        map (normalizeEntry store storeConfig null) storeConfig.entries
+        ++ map (normalizeEntry store storeConfig null) storeConfig.directories
+        ++ map (normalizeEntry store storeConfig null) storeConfig.files
         ++ concatLists (mapAttrsToList (
             user: value: let
               userConfig = userEntries value;
             in
-              map (normalizeEntry store user) userConfig.entries
-              ++ map (normalizeEntry store user) userConfig.directories
-              ++ map (normalizeEntry store user) userConfig.files
+              map (normalizeEntry store storeConfig user) userConfig.entries
+              ++ map (normalizeEntry store storeConfig user) userConfig.directories
+              ++ map (normalizeEntry store storeConfig user) userConfig.files
           )
           storeConfig.users)
     )
@@ -352,6 +370,7 @@ in {
         RequiresMountsFor = mountPaths;
       };
 
+      path = [pkgs.util-linux];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
