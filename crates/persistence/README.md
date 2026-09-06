@@ -79,8 +79,14 @@ by default. Files may use bind mounts or symlinks. Each expanded entry also
 accepts `source`, `owner`, `group`, `mode`, `manageMetadata`, `mountOptions`,
 and a `parent` metadata submodule. `mountOptions` are applied only to bind
 projections. A store's `commonMountOptions` apply to every bind projection from
-that store; entry options are applied afterwards. This supports both kernel
-options such as `exec` and libmount user-space options such as `x-gvfs-hide`.
+that store. Entry options are applied afterwards, and later options win.
+Existing mount flags are preserved unless explicitly overridden. Supported
+kernel options are `ro`/`rw`, `suid`/`nosuid`, `dev`/`nodev`, `exec`/`noexec`,
+`symfollow`/`nosymfollow`, `atime`/`noatime`, `diratime`/`nodiratime`,
+`relatime`/`norelatime`, and `strictatime`/`nostrictatime`. `defaults` leaves
+existing flags unchanged. `x-*` userspace options such as `x-gvfs-hide` are
+recorded through libmount and removed with the projection. Other options are
+rejected before projections change.
 User entries are relative to the configured home. User directories default to
 mode `0700`; system directories default to `0755`.
 
