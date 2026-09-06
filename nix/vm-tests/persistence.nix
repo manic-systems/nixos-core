@@ -12,27 +12,38 @@ in
     name = "nixos-core-persistence";
 
     nodes = let
-      common = {
+      common = {config, ...}: {
         imports = [nixosModule testCommons];
 
         boot.loader.grub.enable = false;
+        environment.systemPackages = [config.system.nixos-core.package];
         system.nixos-core = {
           enable = true;
           persistence = {
             enable = true;
             stores."/persist" = {
-              commonMountOptions = ["x-gvfs-hide"];
+              commonMountOptions = ["exec" "noexec" "x-gvfs-hide"];
               entries = [
                 {
                   target = "/var/lib/core-state";
                   owner = "root";
                   group = "root";
                   mode = "2750";
+                  mountOptions = ["exec"];
+                }
+                {
+                  target = "/var/lib/core-state/restricted";
+                  mountOptions = ["noexec" "nosymfollow"];
+                }
+                {
+                  target = "/var/lib/core-state/readonly";
+                  kind = "file";
+                  mountOptions = ["ro"];
                 }
                 {
                   target = "/srv/core-state";
                   manageMetadata = false;
-                  mountOptions = ["exec"];
+                  mountOptions = ["noexec"];
                 }
                 {
                   target = "/etc/core-id";
@@ -98,6 +109,10 @@ in
           };
         };
 
+        specialisation.visible.configuration = {
+          system.nixos-core.persistence.stores."/persist".commonMountOptions = lib.mkForce [];
+        };
+
         virtualisation = {
           emptyDiskImages = [128 128 128];
           # qemu-vm.nix replaces fileSystems, so this test supplies the mount
@@ -107,6 +122,7 @@ in
               device = "/dev/vdb";
               fsType = "ext4";
               neededForBoot = true;
+              options = ["nosuid" "nodev"];
             };
 
             "/srv" = {
@@ -151,7 +167,7 @@ in
           "/persist" = {
             device = mkForce "/dev/vdb";
             fsType = mkForce "btrfs";
-            options = ["x-systemd.makefs"];
+            options = ["x-systemd.makefs" "nosymfollow"];
           };
 
           "/srv".options = ["x-systemd.makefs"];
@@ -231,6 +247,48 @@ in
 
     testScript = ''
       # Oh lawd he testin.
+      import json
+      import shlex
+
+      def mount_options(machine, target):
+          return set(machine.succeed(f"findmnt --mtab --noheadings --output OPTIONS --mountpoint {target}").strip().split(","))
+
+      def check_mount_options(machine):
+          parent = mount_options(machine, "/var/lib/core-state")
+          inherited = mount_options(machine, "/persist") & {"nosuid", "nodev", "nosymfollow"}
+          assert inherited | {"x-gvfs-hide"} <= parent, parent
+          assert "noexec" not in parent, parent
+          assert "noexec" in mount_options(machine, "/srv/core-state")
+          assert {"noexec", "nosymfollow"} <= mount_options(machine, "/var/lib/core-state/restricted")
+          assert "ro" in mount_options(machine, "/var/lib/core-state/readonly")
+          machine.succeed("cp -L /run/current-system/sw/bin/true /var/lib/core-state/restricted/true")
+          machine.fail("/var/lib/core-state/restricted/true")
+          machine.fail("echo changed > /var/lib/core-state/readonly")
+          machine.succeed("echo source-writable > /persist/var/lib/core-state/readonly")
+
+      def check_mount_failure(machine):
+          binary = machine.succeed("command -v persist").strip()
+          root = "/tmp/persistence-options-test"
+          machine.succeed(f"mkdir -p {root}/persist")
+          machine.succeed(f"mount -t tmpfs tmpfs {root}/persist")
+          previous = dict(store="/persist", source="/persist/previous", target="/target", kind="directory", method="bind")
+          current = dict(previous, source="/persist/current", mountOptions=["x-gvfs-hide"])
+          for name, entry in [("previous", previous), ("current", current)]:
+              plan = shlex.quote(json.dumps(dict(version=1, entries=[entry])))
+              machine.succeed(f"printf %s {plan} > {root}/{name}.json")
+          machine.fail(f"env PATH=/missing {binary} --root {root} {root}/current.json")
+          machine.fail(f"mountpoint -q {root}/target")
+          machine.fail(f"test -e {root}/target")
+          machine.fail(f"test -e {root}/run/nixos-core/persistence.json")
+          machine.succeed(f"{binary} --root {root} {root}/previous.json")
+          machine.succeed(f"echo previous > {root}/target/value")
+          machine.fail(f"env PATH=/missing {binary} --root {root} {root}/current.json")
+          machine.succeed(f"grep -qx previous {root}/target/value")
+          recorded = json.loads(machine.succeed(f"cat {root}/run/nixos-core/persistence.json"))
+          assert recorded["entries"][0]["source"] == previous["source"], recorded
+          machine.succeed(f"{binary} --root {root} --clear")
+          machine.succeed(f"umount {root}/persist")
+
       def exercise(machine):
           machine.start()
           machine.wait_for_unit("multi-user.target")
@@ -241,6 +299,8 @@ in
           machine.succeed("mountpoint -q /var/lib/core-state/nested")
           machine.succeed("mountpoint -q /srv/core-state")
           machine.succeed("mountpoint -q /home/alice/.local/state/core")
+          check_mount_options(machine)
+          check_mount_failure(machine)
           machine.succeed("test $(stat -c %a /var/lib/core-state) = 2750")
           machine.succeed("test $(stat -c %a /home/alice/.ssh) = 700")
           machine.succeed("test $(stat -c %u /persist/home/alice/.local/state/core) -eq $(id -u alice)")
@@ -265,6 +325,11 @@ in
           machine.succeed("grep -qx srv-state /persist/srv/core-state/value")
           machine.succeed("grep -qx home-state /persist/home/alice/.local/state/core/value")
 
+          machine.succeed("/run/current-system/specialisation/visible/bin/switch-to-configuration test")
+          assert "x-gvfs-hide" not in mount_options(machine, "/var/lib/core-state")
+          machine.succeed("/run/booted-system/bin/switch-to-configuration test")
+          check_mount_options(machine)
+
           # Reloading a changed plan must replace projections that share a
           # target with the old ones, then switching back must undo that.
           machine.succeed("/run/current-system/specialisation/changed/bin/switch-to-configuration test")
@@ -281,6 +346,7 @@ in
           machine.fail("test -L /srv/core-state")
           machine.succeed("mountpoint -q /srv/core-state")
           machine.succeed("mountpoint -q /var/lib/core-state/nested")
+          check_mount_options(machine)
           machine.succeed("grep -qx nested-state /var/lib/core-state/nested/value")
           machine.fail("mountpoint -q /var/lib/core-state/sub")
           machine.succeed("test $(readlink /etc/core-id) = /persist/etc/core-id")
@@ -309,6 +375,7 @@ in
           machine.fail("mountpoint -q /home/alice/.local/state/core")
           machine.fail("test -e /etc/core-id")
           machine.fail("test -e /home/alice/.config/core/settings")
+          assert "x-gvfs-hide" not in machine.succeed("cat /run/mount/utab")
 
           # A failed state commit must undo projections made by this invocation.
           machine.succeed("mkdir /run/nixos-core/persistence.json.new")
@@ -319,6 +386,7 @@ in
           machine.fail("mountpoint -q /home/alice/.local/state/core")
           machine.fail("test -e /etc/core-id")
           machine.fail("test -e /home/alice/.config/core/settings")
+          assert "x-gvfs-hide" not in machine.succeed("cat /run/mount/utab")
           machine.succeed("rmdir /run/nixos-core/persistence.json.new")
           machine.succeed("systemctl reset-failed nixos-core-persistence.service")
           machine.succeed("systemctl start nixos-core-persistence.service")
@@ -334,6 +402,7 @@ in
           machine.succeed("grep -qx system-state /var/lib/core-state/value")
           machine.succeed("grep -qx nested-state /var/lib/core-state/nested/value")
           machine.succeed("grep -qx srv-state /srv/core-state/value")
+          check_mount_options(machine)
           machine.succeed("grep -qx identity /etc/core-id")
           machine.succeed("grep -qx settings /home/alice/.config/core/settings")
           machine.succeed("grep -qx home-state /home/alice/.local/state/core/value")
