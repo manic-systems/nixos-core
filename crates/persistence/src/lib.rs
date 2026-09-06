@@ -8,7 +8,6 @@ use std::{
     unix::{ffi::OsStrExt, fs::MetadataExt},
   },
   path::{Component, Path, PathBuf},
-  process::{Command, id},
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -22,6 +21,10 @@ use nix::{
   unistd::{Gid, Group, Uid, UnlinkatFlags, User, fchown, symlinkat, unlinkat},
 };
 use serde::{Deserialize, Serialize};
+
+mod mount_options;
+
+use mount_options::MountOptions;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -222,6 +225,9 @@ fn validate_and_sort(entries: &mut [Entry]) -> Result<()> {
     .collect::<HashSet<_>>();
 
   for entry in entries.iter() {
+    if entry.method == Method::Bind {
+      MountOptions::parse(&entry.mount_options)?;
+    }
     validate_absolute(&entry.store, "store")?;
     validate_absolute(&entry.source, "source")?;
     validate_absolute(&entry.target, "target")?;
@@ -601,15 +607,30 @@ fn remove_bind(root: &Root, entry: &Entry) -> Result<()> {
   verify_projection_source(root, entry, &target)?;
   let Node { fd, parent, .. } = target;
   drop(fd);
+  unmount_bind(entry, &parent)
+}
+
+fn unmount_bind(entry: &Entry, parent: &OwnedFd) -> Result<()> {
   let name = file_name(&entry.target)?;
-  umount2(&proc_path(&parent).join(&name), MntFlags::empty()).with_context(
-    || {
+  let recorded_target = fs::read_link(proc_path(parent))?.join(&name);
+  umount2(&proc_path(parent).join(&name), MntFlags::UMOUNT_NOFOLLOW)
+    .with_context(|| {
       format!(
         "Failed to unmount stale projection {}",
         entry.target.display()
       )
-    },
-  )?;
+    })?;
+  let forgotten =
+    MountOptions::parse(&entry.mount_options)?.forget(&recorded_target);
+  let removed = remove_placeholder(entry, parent, &name);
+  forgotten.and(removed)
+}
+
+fn remove_placeholder(
+  entry: &Entry,
+  parent: &OwnedFd,
+  name: &OsStr,
+) -> Result<()> {
   if !entry.placeholder {
     return Ok(());
   }
@@ -617,7 +638,7 @@ fn remove_bind(root: &Root, entry: &Entry) -> Result<()> {
     Kind::Directory => UnlinkatFlags::RemoveDir,
     Kind::File => UnlinkatFlags::NoRemoveDir,
   };
-  match unlinkat(&parent, Path::new(&name), flags) {
+  match unlinkat(parent, Path::new(name), flags) {
     Ok(()) | Err(Errno::ENOENT | Errno::ENOTEMPTY) => Ok(()),
     Err(error) => {
       Err(error).with_context(|| {
@@ -652,7 +673,8 @@ fn same_projection(left: &Entry, right: &Entry) -> bool {
     && left.target == right.target
     && left.kind == right.kind
     && left.method == right.method
-    && left.mount_options == right.mount_options
+    && (left.method == Method::Symlink
+      || left.mount_options == right.mount_options)
 }
 
 fn is_mount_node(node: &Node) -> bool {
@@ -920,6 +942,7 @@ fn resolve_group(value: Option<&str>) -> Result<Option<u32>> {
 }
 
 fn bind(root: &Root, entry: &Entry) -> Result<bool> {
+  let options = MountOptions::parse(&entry.mount_options)?;
   let source =
     root
       .open_node(&entry.source, entry.kind)?
@@ -932,7 +955,7 @@ fn bind(root: &Root, entry: &Entry) -> Result<bool> {
       .with_context(|| {
         format!("Target {} disappeared", entry.target.display())
       })?;
-  if same_node(&source, &target)? {
+  if is_mount_node(&target) && same_node(&source, &target)? {
     return Ok(false);
   }
   ensure!(
@@ -956,59 +979,32 @@ fn bind(root: &Root, entry: &Entry) -> Result<bool> {
       entry.target.display()
     )
   })?;
-  let verified = root
-    .open_node(&entry.target, entry.kind)?
-    .with_context(|| {
-      format!("Target {} disappeared after mount", entry.target.display())
-    })
-    .and_then(|mounted| {
-      ensure!(
-        same_node(&source, &mounted)?,
-        "Bind mount at {} did not resolve to {}",
-        entry.target.display(),
-        entry.source.display()
-      );
-      Ok(())
-    });
-  if let Err(error) = verified {
-    drop(target);
-    let _ = umount2(&target_path, MntFlags::empty());
-    return Err(error);
-  }
-  let mounted =
-    root
-      .open_node(&entry.target, entry.kind)?
-      .with_context(|| {
-        format!(
-          "Target {} disappeared before applying mount options",
-          entry.target.display()
-        )
-      })?;
-  if let Err(error) = apply_mount_options(entry, &mounted) {
-    drop(target);
-    let _ = umount2(&target_path, MntFlags::empty());
-    return Err(error);
+  let result = (|| {
+    let mounted =
+      root
+        .open_node(&entry.target, entry.kind)?
+        .with_context(|| {
+          format!("Target {} disappeared after mount", entry.target.display())
+        })?;
+    ensure!(
+      same_node(&source, &mounted)?,
+      "Bind mount at {} did not resolve to {}",
+      entry.target.display(),
+      entry.source.display()
+    );
+    options.apply(&mounted.fd)?;
+    options.record(&source.fd, &mounted.fd)
+  })();
+  if let Err(error) = result {
+    let Node { fd, parent, .. } = target;
+    drop(fd);
+    return Err(discard_failure(
+      error,
+      unmount_bind(entry, &parent),
+      &entry.target,
+    ));
   }
   Ok(true)
-}
-
-fn apply_mount_options(entry: &Entry, target: &Node) -> Result<()> {
-  if entry.mount_options.is_empty() {
-    return Ok(());
-  }
-  let options = format!("remount,bind,{}", entry.mount_options.join(","));
-  let target = format!("/proc/{}/fd/{}", id(), target.fd.as_raw_fd());
-  let output = Command::new("mount")
-    .args(["-o", &options, &target])
-    .output()
-    .context("Failed to run mount for bind projection options")?;
-  ensure!(
-    output.status.success(),
-    "Failed to apply mount options to {}: {}",
-    entry.target.display(),
-    String::from_utf8_lossy(&output.stderr).trim()
-  );
-  Ok(())
 }
 
 fn same_node(source: &Node, target: &Node) -> Result<bool> {
