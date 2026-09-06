@@ -74,7 +74,18 @@
         type = listOf str;
         default = [];
         example = ["exec" "x-gvfs-hide"];
-        description = "Mount options applied to this bind projection. They have no effect on symbolic links.";
+        description = ''
+          Mount options applied to this bind projection, preserving existing flags
+          unless explicitly overridden. Note that later options take precedence.
+
+          Supported options are ro/rw, suid/nosuid, dev/nodev,
+          exec/noexec, symfollow/nosymfollow, atime/noatime, diratime/nodiratime,
+          relatime/norelatime, strictatime/nostrictatime, defaults, and x-* userspace
+          options.
+
+          Unsupported bind mount options are rejected before projections change.
+          Mount options are ignored for symbolic links.
+        '';
       };
 
       manageMetadata = mkOption {
@@ -239,7 +250,7 @@
     inherit store target;
     source = join store sourceRelative;
     inherit (entry) kind method manageMetadata;
-    mountOptions = unique (storeConfig.commonMountOptions ++ entry.mountOptions);
+    mountOptions = storeConfig.commonMountOptions ++ entry.mountOptions;
     owner = metadataValue entry.owner defaultOwner;
     group = metadataValue entry.group defaultGroup;
     mode = metadataValue entry.mode (
