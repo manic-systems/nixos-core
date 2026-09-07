@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "activation-common"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
 ]
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "init-script"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "nixos-core"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -554,7 +554,7 @@ checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "persistence"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "setup-etc"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "stage1"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -795,7 +795,7 @@ dependencies = [
 
 [[package]]
 name = "stage2"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "activation-common",
  "anyhow",
@@ -922,7 +922,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "update-users-groups"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
