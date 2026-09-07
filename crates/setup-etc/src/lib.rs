@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use smfh_core::manifest::{File as ManifestFile, FileKind, Manifest};
+use smfh_core::manifest::{File as ManifestFile, Manifest};
 
 mod manifest_diff;
 
@@ -315,18 +315,18 @@ fn build_etc_manifest(
             continue;
           },
         };
-        files.push(ManifestFile {
-          source: Some(real_source),
-          target,
-          kind: FileKind::Copy,
-          clobber: Some(true),
-          permissions: Some(mode),
-          uid: Some(uid),
-          gid: Some(gid),
-          deactivate: None,
-          follow_symlinks: None,
-          ignore_modification: None,
-        });
+        files.push(
+          serde_json::from_value(serde_json::json!({
+            "source": real_source,
+            "target": target,
+            "type": "copy",
+            "clobber": true,
+            "permissions": format!("{mode:o}"),
+            "uid": uid,
+            "gid": gid,
+          }))
+          .context("failed to construct copy manifest entry")?,
+        );
       }
     } else if current_is_symlink {
       // No .mode file and the store entry is a symlink: create a /etc/static
@@ -335,18 +335,16 @@ fn build_etc_manifest(
       // fs::canonicalize(); canonicalize() would resolve /etc/static/<relative>
       // all the way to the nix store, breaking the indirection that lets
       // generation switches work without touching individual /etc symlinks.
-      files.push(ManifestFile {
-        source: Some(etc_static.join(relative)),
-        target,
-        kind: FileKind::Symlink,
-        clobber: Some(true),
-        permissions: None,
-        uid: None,
-        gid: None,
-        deactivate: None,
-        follow_symlinks: Some(false),
-        ignore_modification: None,
-      });
+      files.push(
+        serde_json::from_value(serde_json::json!({
+          "source": etc_static.join(relative),
+          "target": target,
+          "type": "symlink",
+          "clobber": true,
+          "follow_symlinks": false,
+        }))
+        .context("failed to construct symlink manifest entry")?,
+      );
     } else if current.is_dir() {
       // Directory: ensure it exists in /etc and descend into it.
       if let Err(e) = fs::create_dir_all(&target) {
@@ -677,6 +675,7 @@ pub fn create_nixos_tag() -> Result<()> {
 mod tests {
   use std::os::unix::fs::symlink;
 
+  use smfh_core::manifest::FileKind;
   use tempfile::TempDir;
 
   use super::*;
@@ -839,18 +838,16 @@ mod tests {
 
   #[test]
   fn test_file_to_json_permissions_are_octal_string() {
-    let file = ManifestFile {
-      source:              Some(PathBuf::from("/src/foo")),
-      target:              PathBuf::from("/etc/foo"),
-      kind:                FileKind::Copy,
-      clobber:             Some(true),
-      permissions:         Some(0o644),
-      uid:                 Some(0),
-      gid:                 Some(0),
-      deactivate:          None,
-      follow_symlinks:     None,
-      ignore_modification: None,
-    };
+    let file: ManifestFile = serde_json::from_value(serde_json::json!({
+      "source": "/src/foo",
+      "target": "/etc/foo",
+      "type": "copy",
+      "clobber": true,
+      "permissions": "644",
+      "uid": 0,
+      "gid": 0,
+    }))
+    .unwrap();
     let v = file_to_json(&file).unwrap();
     assert_eq!(
       v["permissions"],
