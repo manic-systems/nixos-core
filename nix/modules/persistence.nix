@@ -45,7 +45,7 @@
     };
   };
 
-  entryType = submodule {
+  entryModule = defaultKind: {
     options = {
       target = mkOption {
         type = str;
@@ -60,7 +60,7 @@
 
       kind = mkOption {
         type = enum ["directory" "file"];
-        default = "directory";
+        default = defaultKind;
         description = "Filesystem object created at source and target.";
       };
 
@@ -121,18 +121,13 @@
     };
   };
 
-  entryType' = coercedTo str (target: {inherit target;}) entryType;
-  directoryType = entryType';
-  fileType =
-    coercedTo str (target: {
-      inherit target;
-      kind = "file";
-    })
-    entryType;
-  userStoreType = either (listOf entryType') (submodule {
+  entryType = defaultKind: coercedTo str (target: {inherit target;}) (submodule (entryModule defaultKind));
+  directoryType = entryType "directory";
+  fileType = entryType "file";
+  userStoreType = either (listOf directoryType) (submodule {
     options = {
       entries = mkOption {
-        type = listOf entryType';
+        type = listOf directoryType;
         default = [];
         description = "Legacy home-relative persistence entries.";
       };
@@ -154,7 +149,7 @@
   storeType = submodule {
     options = {
       entries = mkOption {
-        type = listOf entryType';
+        type = listOf directoryType;
         default = [];
         description = "Legacy system persistence entries.";
       };

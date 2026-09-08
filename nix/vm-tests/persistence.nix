@@ -51,6 +51,18 @@ in
                   method = "symlink";
                 }
               ];
+              # A file persisted inside a persisted directory, declared through
+              # the attribute set form both lists coerce to.
+              users.bob = {
+                directories = [".local/share/app"];
+                files = [
+                  {
+                    target = ".local/share/app/plugin.so";
+                    mountOptions = ["exec"];
+                  }
+                ];
+              };
+
               users.alice = [
                 ".ssh"
                 {
@@ -73,9 +85,16 @@ in
           };
         };
 
-        users.users.alice = {
-          isNormalUser = true;
-          group = "users";
+        users.users = {
+          alice = {
+            isNormalUser = true;
+            group = "users";
+          };
+
+          bob = {
+            isNormalUser = true;
+            group = "users";
+          };
         };
 
         # Narrows one bind to a child, turns a bind into a symlink and moves a
@@ -245,7 +264,7 @@ in
       };
     };
 
-    testScript = ''
+    testScript = /* py */ ''
       # Oh lawd he testin.
       import json
       import shlex
@@ -261,6 +280,12 @@ in
           assert "noexec" in mount_options(machine, "/srv/core-state")
           assert {"noexec", "nosymfollow"} <= mount_options(machine, "/var/lib/core-state/restricted")
           assert "ro" in mount_options(machine, "/var/lib/core-state/readonly")
+          nested_file = mount_options(machine, "/home/bob/.local/share/app/plugin.so")
+          assert "noexec" not in nested_file, nested_file
+          assert "noexec" in mount_options(machine, "/home/bob/.local/share/app")
+          plugin = "/persist/home/bob/.local/share/app/plugin.so"
+          machine.succeed(f"echo '#!/bin/sh' > {plugin}", f"echo 'exit 0' >> {plugin}", f"chmod 755 {plugin}")
+          machine.succeed("/home/bob/.local/share/app/plugin.so")
           machine.succeed("cp -L /run/current-system/sw/bin/true /var/lib/core-state/restricted/true")
           machine.fail("/var/lib/core-state/restricted/true")
           machine.fail("echo changed > /var/lib/core-state/readonly")
@@ -299,6 +324,8 @@ in
           machine.succeed("mountpoint -q /var/lib/core-state/nested")
           machine.succeed("mountpoint -q /srv/core-state")
           machine.succeed("mountpoint -q /home/alice/.local/state/core")
+          machine.succeed("mountpoint -q /home/bob/.local/share/app/plugin.so")
+          machine.succeed("test -f /persist/home/bob/.local/share/app/plugin.so")
           check_mount_options(machine)
           check_mount_failure(machine)
           machine.succeed("test $(stat -c %a /var/lib/core-state) = 2750")
@@ -373,6 +400,7 @@ in
           machine.fail("findmnt -n /var/lib/core-state/nested")
           machine.fail("mountpoint -q /srv/core-state")
           machine.fail("mountpoint -q /home/alice/.local/state/core")
+          machine.fail("findmnt -n /home/bob/.local/share/app/plugin.so")
           machine.fail("test -e /etc/core-id")
           machine.fail("test -e /home/alice/.config/core/settings")
           assert "x-gvfs-hide" not in machine.succeed("cat /run/mount/utab")
@@ -399,6 +427,7 @@ in
           machine.succeed("mountpoint -q /var/lib/core-state/nested")
           machine.succeed("mountpoint -q /srv/core-state")
           machine.succeed("mountpoint -q /home/alice/.local/state/core")
+          machine.succeed("mountpoint -q /home/bob/.local/share/app/plugin.so")
           machine.succeed("grep -qx system-state /var/lib/core-state/value")
           machine.succeed("grep -qx nested-state /var/lib/core-state/nested/value")
           machine.succeed("grep -qx srv-state /srv/core-state/value")
