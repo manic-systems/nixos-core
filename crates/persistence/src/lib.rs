@@ -1154,6 +1154,9 @@ impl Root {
         }))
       },
       Err(Errno::ENOENT) => Ok(None),
+      Err(Errno::ENOTDIR) if kind == Kind::Directory => {
+        bail!("Existing {} is not a directory", path.display())
+      },
       Err(error) => {
         Err(error).with_context(|| {
           format!(
