@@ -1828,6 +1828,26 @@ fn mount_root(
   Ok(())
 }
 
+fn rewrite_overlay_option(option: &str, target_root: &str) -> String {
+  for prefix in ["lowerdir=", "upperdir=", "workdir="] {
+    if let Some(paths) = option.strip_prefix(prefix) {
+      let adjusted = paths
+        .split(':')
+        .map(|path| {
+          if path.starts_with('/') {
+            format!("{target_root}{path}")
+          } else {
+            path.to_string()
+          }
+        })
+        .collect::<Vec<_>>()
+        .join(":");
+      return format!("{prefix}{adjusted}");
+    }
+  }
+  option.to_string()
+}
+
 fn mount_additional_filesystems(
   fs_infos: &[FsInfo],
   target_root: &Path,
@@ -1860,26 +1880,7 @@ fn mount_additional_filesystems(
       adjusted_fs_info.options = fs_info
         .options
         .iter()
-        .map(|opt| {
-          for prefix in &["lowerdir=", "upperdir=", "workdir="] {
-            if let Some(rest) = opt.strip_prefix(prefix) {
-              // Rewrite each colon-separated path component.
-              let adjusted = rest
-                .split(':')
-                .map(|p| {
-                  if p.starts_with('/') {
-                    format!("{target_root_str}{p}")
-                  } else {
-                    p.to_string()
-                  }
-                })
-                .collect::<Vec<_>>()
-                .join(":");
-              return format!("{prefix}{adjusted}");
-            }
-          }
-          opt.clone()
-        })
+        .map(|option| rewrite_overlay_option(option, &target_root_str))
         .collect();
     }
 
@@ -2894,4 +2895,26 @@ pub fn run(args: &[String]) -> Result<()> {
   }
 
   bail!("switch_root returned unexpectedly")
+}
+
+#[cfg(test)]
+mod tests {
+  use super::rewrite_overlay_option;
+
+  #[test]
+  fn rewrites_only_absolute_overlay_paths() {
+    assert_eq!(
+      rewrite_overlay_option("lowerdir=/a:relative:/b", "/mnt/root"),
+      "lowerdir=/mnt/root/a:relative:/mnt/root/b"
+    );
+    assert_eq!(
+      rewrite_overlay_option("upperdir=/upper", "/mnt/root"),
+      "upperdir=/mnt/root/upper"
+    );
+    assert_eq!(
+      rewrite_overlay_option("workdir=/work", "/mnt/root"),
+      "workdir=/mnt/root/work"
+    );
+    assert_eq!(rewrite_overlay_option("ro", "/mnt/root"), "ro");
+  }
 }
