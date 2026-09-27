@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+  inputs.nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.zst";
 
   outputs = {
     self,
@@ -7,17 +7,17 @@
   }: let
     inherit (nixpkgs.lib) genAttrs systems;
     forEachSystem = genAttrs systems.doubles.linux;
-    pkgsForEach = system: import nixpkgs { inherit system; };
+    pkgsForEach = system: import nixpkgs {inherit system;};
 
     # Build system -> matching pkgsCross musl target.
     # powerpc-linux is omitted because packages.powerpc-linux is unevaluatable.
     muslCrossAttr = {
-      x86_64-linux    = "musl64";
-      i686-linux      = "musl32";
-      aarch64-linux   = "aarch64-multiplatform-musl";
-      armv6l-linux    = "muslpi";
+      x86_64-linux = "musl64";
+      i686-linux = "musl32";
+      aarch64-linux = "aarch64-multiplatform-musl";
+      armv6l-linux = "muslpi";
       powerpc64-linux = "ppc64-musl";
-      riscv64-linux   = "riscv64-musl";
+      riscv64-linux = "riscv64-musl";
     };
   in {
     nixosModules = {
