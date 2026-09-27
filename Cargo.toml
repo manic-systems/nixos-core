@@ -39,6 +39,8 @@ smfh-core = "1.7.1"
 tempfile = "3.27.0"
 time = { version = "0.3.55", default-features = false, features = [ "parsing", "formatting", "macros" ] }
 
+# See:
+#  <https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html>
 [workspace.lints.clippy]
 cargo      = { level = "warn", priority = -1 }
 complexity = { level = "warn", priority = -1 }
@@ -46,10 +48,85 @@ nursery    = { level = "warn", priority = -1 }
 pedantic   = { level = "warn", priority = -1 }
 perf       = { level = "warn", priority = -1 }
 style      = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+# Explicit checks complement the lint groups; the restriction lints below
+# target error handling, hidden casts, expression ordering, and UTF-8 safety.
+absolute_paths                       = "deny"
+allow_attributes                     = "deny"
+allow_attributes_without_reason      = "deny"
+arbitrary_source_item_ordering       = "allow"
+as_underscore                        = "warn"
+clone_on_ref_ptr                     = "warn"
+dbg_macro                            = "warn"
+disallowed_methods                   = "deny"
+disallowed_types                     = "deny"
+empty_drop                           = "warn"
+empty_structs_with_brackets          = "warn"
+excessive_nesting                    = "warn"
+exit                                 = "warn"
+filetype_is_file                     = "warn"
+get_unwrap                           = "warn"
+implicit_return                      = "allow"
+infinite_loop                        = "warn"
+iter_on_single_items                 = "warn"
+map_err_ignore                       = "warn"
+map_with_unused_argument_over_ranges = "warn"
+missing_docs_in_private_items        = "allow"
+mixed_read_write_in_expression       = "warn"
+multiple_crate_versions              = "allow" # :(
+non_ascii_literal                    = "allow"
+non_std_lazy_statics                 = "warn"
+non_zero_suggestions                 = "warn"
+pathbuf_init_then_push               = "warn"
+pattern_type_mismatch                = "allow"
+precedence_bits                      = "warn"
+pub_underscore_fields                = "warn"
+question_mark_used                   = "allow"
+rc_buffer                            = "warn"
+rc_mutex                             = "warn"
+redundant_clone                      = "warn"
+rest_pat_in_fully_bound_structs      = "warn"
+self_named_module_files              = "warn"
+significant_drop_in_scrutinee        = "warn"
+similar_names                        = "allow"
+single_call_fn                       = "allow"
+std_instead_of_core                  = "allow"
+string_slice                         = "warn"
+suspicious_operation_groupings       = "warn"
+too_long_first_doc_paragraph         = "warn"
+too_many_lines                       = "allow"
+undocumented_unsafe_blocks           = "warn"
+unnecessary_safety_comment           = "warn"
+unused_peekable                      = "warn"
+unused_result_ok                     = "warn"
+unused_trait_names                   = "allow"
+
+# False positive:
+# clippy's build script check doesn't recognize workspace-inherited metadata
+# which means in our current workspace layout, we get pranked by Clippy.
+cargo_common_metadata = "allow"
+
+# In the honor of a recent Cloudflare regression
+panic       = "deny"
+unwrap_used = "deny"
+
+# Less dangerous, but we'd like to know
+# Those must be opt-in, and are fine ONLY in tests and examples.
+expect_used   = "warn"
+print_stderr  = "warn"
+print_stdout  = "warn"
+todo          = "warn"
+unimplemented = "warn"
+unreachable   = "warn"
 
 [workspace.lints.rust]
-# Style lints from rustc
-unused = "warn"
+non_ascii_idents       = "warn" # prevent non-ASCII identifiers
+tail_expr_drop_order   = "warn" # catch temporaries dropped in surprising order
+unit_bindings          = "warn" # catch useless `let _ = expr` bindings
+unsafe_code            = "warn" # guess
+unsafe_op_in_unsafe_fn = "warn" # require unsafe blocks even inside unsafe fn
+unused_unsafe          = "warn" # catch unnecessary unsafe blocks
 
 [profile.release]
 codegen-units = 1
