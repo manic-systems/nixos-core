@@ -191,6 +191,16 @@ therefore set at 1.94.0, and may change as the language evolves.
 - Explicit error handling with the `?` operator
 - Dry-run mode available for all destructive operations
 
+#### Linting
+
+Run the same Clippy check as CI across every workspace crate, target, and
+feature before submitting Rust changes:
+
+```sh
+# Run the Clippy lint suite
+$ cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
 #### Testing
 
 This repository provides a few VM test to verify correct behaviour. Those are
