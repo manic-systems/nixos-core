@@ -161,13 +161,11 @@ fn add_generations(entries: &mut Vec<InitEntry>) -> Result<()> {
 }
 
 fn parse_generation_number(name: &str) -> Option<u32> {
-  if name.starts_with("system-") && name.ends_with("-link") {
-    let start = name.find('-')? + 1;
-    let end = name.rfind('-')?;
-    name[start..end].parse::<u32>().ok()
-  } else {
-    None
-  }
+  name
+    .strip_prefix("system-")?
+    .strip_suffix("-link")?
+    .parse()
+    .ok()
 }
 
 // Format a Unix timestamp as "YYYY-MM-DD HH:MM:SS" UTC without pulling in a
