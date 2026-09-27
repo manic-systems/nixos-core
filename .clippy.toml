@@ -1,0 +1,7 @@
+# Keep version-sensitive suggestions aligned with the workspace MSRV.
+msrv = "1.94.0"
+
+cognitive-complexity-threshold = 25
+excessive-nesting-threshold    = 7
+too-many-arguments-threshold   = 7
+too-many-lines-threshold       = 150
