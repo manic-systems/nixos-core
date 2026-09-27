@@ -966,10 +966,16 @@ fn date_to_days(date: &str) -> Result<u64> {
   if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
     return Err(anyhow::anyhow!(err()));
   }
-  let parse = |s: &str| s.parse::<u32>().with_context(err);
-  let y = parse(&date[0..4])? as i32;
-  let m = parse(&date[5..7])?;
-  let d = parse(&date[8..10])?;
+  let parse = |range: std::ops::Range<usize>| {
+    date
+      .get(range)
+      .ok_or_else(|| anyhow::anyhow!(err()))?
+      .parse::<u32>()
+      .with_context(err)
+  };
+  let y = parse(0..4)? as i32;
+  let m = parse(5..7)?;
+  let d = parse(8..10)?;
   if !(1..=12).contains(&m) || !(1..=days_in_month(y, m)).contains(&d) {
     return Err(anyhow::anyhow!(err()));
   }
