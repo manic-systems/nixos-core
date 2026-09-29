@@ -5,6 +5,8 @@
   rustfmt,
   clippy,
   taplo,
+  pkg-config,
+  openssl,
   cargo-nextest,
 }:
 mkShell {
@@ -14,6 +16,7 @@ mkShell {
   nativeBuildInputs = [
     rustc
     cargo
+    pkg-config
 
     # Tools
     (rustfmt.override {asNightly = true;})
@@ -23,4 +26,5 @@ mkShell {
     # Additional Cargo Tooling
     cargo-nextest
   ];
+  buildInputs = [openssl];
 }
