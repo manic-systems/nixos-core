@@ -1322,6 +1322,7 @@ dependencies = [
  "init-script",
  "log",
  "persistence",
+ "secrets",
  "setup-etc",
  "stage1",
  "stage2",
