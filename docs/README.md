@@ -137,10 +137,21 @@ example, in your system's `flake.nix`:
 }
 ```
 
-Switch your sytem, then reboot to use the new boot-stage components. You can
+> [!IMPORTANT]
+> Un-tagged releases of nixos-core should be considered unstable. If you are
+> interested in stable releases and in updating on your own schedule, please
+> consider using a **specific tag** in your flake input, and update after
+> reviewing the changes yourself.
+
+Once you add the NixOS module for nixos-core, switch your system via `nh` or
+`nixos-rebuild` and then reboot to use the new boot-stage components. You can
 enable individual replacements gradually through `system.nixos-core.components`
-instead of switching them all on at once; the module cannot be enabled alongside
-`system.nixos-init`, `/etc` overlay, Userborn, or systemd-sysusers.
+instead of switching them all on at once; **the module cannot be enabled
+alongside `system.nixos-init`, `/etc` overlay, Userborn, or systemd-sysusers**.
+Take a look at the NixOS module for the exact incompatabilities and override
+behaviour.
+
+### CLI
 
 The `nixos-core` crate provides a multi-call binary invocable either as a
 symlink:
