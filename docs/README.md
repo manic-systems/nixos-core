@@ -5,21 +5,21 @@
 </h1>
 
 <div align="center">
-    <a alt="CI" href="https://github.com/sisyphean-group/nixos-core/actions">
+    <a alt="CI" href="https://github.com/manic-systems/nixos-core/actions">
         <img
-          src="https://github.com/sisyphean-group/nixos-core/actions/workflows/rust.yml/badge.svg"
+          src="https://github.com/manic-systems/nixos-core/actions/workflows/rust.yml/badge.svg"
           alt="Build Status"
         />
     </a>
-    <a alt="Dependencies" href="https://deps.rs/repo/github/sisyphean-group/nixos-core">
+    <a alt="Dependencies" href="https://deps.rs/repo/github/manic-systems/nixos-core">
         <img
-          src="https://deps.rs/repo/github/sisyphean-group/nixos-core/status.svg"
+          src="https://deps.rs/repo/github/manic-systems/nixos-core/status.svg"
           alt="Dependency Status"
         />
     </a>
-    <a alt="License" href="https://github.com/sisyphean-group/nixos-core/blob/master/LICENSE">
+    <a alt="License" href="https://github.com/manic-systems/nixos-core/blob/master/LICENSE">
         <img
-          src="https://img.shields.io/github/license/sisyphean-group/nixos-core?label=License"
+          src="https://img.shields.io/github/license/manic-systems/nixos-core?label=License"
           alt="License"
         />
     </a>
@@ -109,6 +109,39 @@ wrong.
 
 ## Usage
 
+### NixOS Installation
+
+To install `nixos-core` on a flake-based NixOS system, add this repository as an
+input, import its NixOS module, and enable it in your host configuration. For
+example, in your system's `flake.nix`:
+
+```nix
+{
+  inputs = {
+    # ...
+    nixos-core.url = "github:manic-systems/nixos-core";
+    # ...
+  };
+
+  outputs = { nixpkgs, nixos-core, ... }: {
+    nixosConfigurations.<my-hostname> = nixpkgs.lib.nixosSystem {
+      modules = [
+
+        # Add nixos-core's NixOS module, and enable `system.nixos-core` to
+        # replace components.
+        nixos-core.nixosModules.default
+        { system.nixos-core.enable = true; }
+      ];
+    };
+  };
+}
+```
+
+Switch your sytem, then reboot to use the new boot-stage components. You can
+enable individual replacements gradually through `system.nixos-core.components`
+instead of switching them all on at once; the module cannot be enabled alongside
+`system.nixos-init`, `/etc` overlay, Userborn, or systemd-sysusers.
+
 The `nixos-core` crate provides a multi-call binary invocable either as a
 symlink:
 
@@ -161,15 +194,18 @@ these features are described in detail in the [`stage2` crate's README].
 [Finix]: https://github.com/finix-community/finix
 
 `nixos-core` aims to be a safe, independent core utility for NixOS and NixOS
-derivatives that build their own tooling from scratch, such as [MicrOS] and
-[Finix]. The main goals of this project is being a fast, portable and consistent
-utilities written in clean Rust, from one coherent codebase, and designed
-modular enough through feature flags and NixOS module knobs to fit into any
-system and derivative project. It is an out-of-tree module to meet those goals
-without the behavioral changes imposed by Nixpkgs alternatives like Userborn,
-the `/etc` overlay, or nixos-init. That is not to say those are fundamentally
-incompatible with this project, but they are _different_. There may be room for
-collaboration in the future.
+derivatives that build their own tooling from scratch, such as _but not limited
+to_ [MicrOS] and [Finix]. The main goals of this project is being a fast,
+portable and consistent utilities written in clean Rust, from one coherent
+codebase, and designed modular enough through feature flags and NixOS module
+knobs to fit into any system and derivative project.
+
+It is an out-of-tree module to meet those goals without the behavioral changes
+imposed by Nixpkgs alternatives like Userborn, the `/etc` overlay, or
+nixos-init. That is not to say those are fundamentally incompatible with this
+project, but they are _different_. There may be room for collaboration in the
+future, however, nixos-core ultimately supersedes all of the Nixpkgs-native Rust
+rewrites in a more generic, reusable manner with less dogmatism involved.
 
 ## Contributing
 
