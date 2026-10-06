@@ -18,7 +18,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, bail};
+use misstep::{OptionExt, Result, ResultExt, bail};
 use nix::{
   libc,
   mount::{MsFlags, mount},
@@ -1326,7 +1326,7 @@ fn handle_resume(
           .context("Failed to write to /sys/power/resume")
       })
   } else {
-    Err(anyhow::anyhow!(
+    Err(misstep::report!(
       "Resume device does not exist: {resume_dev}"
     ))
   };
@@ -1767,7 +1767,7 @@ fn mount_root(
     }
 
     resolved.ok_or_else(|| {
-      anyhow::anyhow!("Timed out waiting for root device: {root_device}")
+      misstep::report!("Timed out waiting for root device: {root_device}")
     })?
   };
   let mount_device = mount_device_owned.as_str();

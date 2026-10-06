@@ -6,7 +6,7 @@ resolver = "3"
 edition      = "2024"
 license      = "MPL-2.0"
 repository   = "https://github.com/feel-co/nixos-core"
-rust-version = "1.94.0"
+rust-version = "1.95.0"
 version      = "1.1.0"
 
 [workspace.dependencies]
@@ -19,7 +19,7 @@ stage1              = { path = "./crates/stage1", version = "1.1.0" }
 stage2              = { path = "./crates/stage2", version = "1.1.0" }
 update-users-groups = { path = "./crates/update-users-groups", version = "1.1.0" }
 
-anyhow = "1.0.104"
+misstep = "0.3.0"
 clap = { version = "4.6.7", default-features = false, features = [
   "derive",
   "env",

@@ -10,9 +10,9 @@ use std::{
   path::{Component, Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use log::info;
+use misstep::{OptionExt, Result, ResultExt, bail, ensure};
 use nix::{
   errno::Errno,
   fcntl::{OFlag, open, openat, renameat},
@@ -204,7 +204,7 @@ fn inherit_placeholders(plan: &mut [Entry], previous: &[Entry]) {
   }
 }
 
-fn rollback(error: anyhow::Error, restored: Result<()>) -> anyhow::Error {
+fn rollback(error: misstep::Report, restored: Result<()>) -> misstep::Report {
   match restored {
     Ok(()) => error,
     Err(restore_error) => {
@@ -1326,11 +1326,11 @@ impl Root {
   }
 }
 
-fn discard_failure<E: Into<anyhow::Error>>(
-  error: anyhow::Error,
+fn discard_failure<E: Into<misstep::Report>>(
+  error: misstep::Report,
   removed: std::result::Result<(), E>,
   path: &Path,
-) -> anyhow::Error {
+) -> misstep::Report {
   match removed {
     Ok(()) => error,
     Err(remove_error) => {

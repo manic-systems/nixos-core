@@ -8,6 +8,6 @@ repository.workspace   = true
 description            = "NixOS stage 1 initrd bootstrap"
 
 [dependencies]
-anyhow.workspace = true
-libc.workspace   = true
-nix.workspace    = true
+libc.workspace    = true
+misstep.workspace = true
+nix.workspace     = true

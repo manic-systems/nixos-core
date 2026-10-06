@@ -5,8 +5,8 @@ use std::{
   path::Path,
 };
 
-use anyhow::{Context, Result};
 use clap::Parser;
+use misstep::{OptionExt, Result};
 
 /// Create generic /sbin/init script
 #[derive(Parser, Debug)]
@@ -223,7 +223,7 @@ fn extract_kernel_version(kernel_path: &Path) -> Result<String> {
     .and_then(|p| p.parent())
     .map(|p| p.join("lib/modules"))
     .filter(|p| p.exists())
-    .ok_or_else(|| anyhow::anyhow!("Could not find modules directory"))?;
+    .ok_or_else(|| misstep::report!("Could not find modules directory"))?;
 
   // Collect all version directories, sort, and return the last, i.e., highest
   // version.
@@ -248,7 +248,7 @@ fn extract_kernel_version(kernel_path: &Path) -> Result<String> {
     parse_parts(a).cmp(&parse_parts(b))
   });
   versions.into_iter().last().ok_or_else(|| {
-    anyhow::anyhow!(
+    misstep::report!(
       "No kernel version directories found in {}",
       modules_dir.display()
     )

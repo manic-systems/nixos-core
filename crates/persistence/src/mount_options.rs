@@ -5,7 +5,7 @@ use std::{
   process::Command,
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use misstep::{OptionExt, Result, ResultExt, bail, ensure};
 use nix::mount::{MsFlags, mount};
 
 use crate::{mount_id, proc_path};
