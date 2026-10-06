@@ -11,8 +11,8 @@ use std::{
 };
 
 use activation_common::{get_mount_options, is_mounted};
-use anyhow::{Context, Result, bail};
 use log::{info, warn};
+use misstep::{Result, ResultExt, bail};
 use nix::{
   mount::{MsFlags, mount},
   unistd::{Group, getpid},
@@ -234,7 +234,7 @@ fn capture_stdio(
   let pipe_fd = child
     .stdin
     .take()
-    .ok_or_else(|| anyhow::anyhow!("capture child missing stdin"))?
+    .ok_or_else(|| misstep::report!("capture child missing stdin"))?
     .into_raw_fd();
 
   // SAFETY: redirect fds 1 and 2 onto the pipe, then close the original.

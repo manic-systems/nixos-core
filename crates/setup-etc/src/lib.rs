@@ -5,9 +5,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
 use clap::Parser;
 use log::{info, warn};
+use misstep::{Result, ResultExt};
 use serde::{Deserialize, Serialize};
 use smfh_core::manifest::{File as ManifestFile, Manifest};
 
@@ -108,11 +108,11 @@ pub fn run(args: &[String]) -> Result<()> {
     // fallback=true means a missing or corrupt old manifest triggers a clean
     // activate rather than an error.
     let new_manifest = Manifest::read(&manifest_tmp, false)
-      .map_err(|e| anyhow::anyhow!("Failed to parse manifest: {e:?}"))?;
+      .map_err(|e| misstep::report!("Failed to parse manifest: {e:?}"))?;
 
     new_manifest
       .diff(manifest_diff_base.path(), "", true)
-      .map_err(|e| anyhow::anyhow!("Failed to apply manifest diff: {e:?}"))?;
+      .map_err(|e| misstep::report!("Failed to apply manifest diff: {e:?}"))?;
 
     activate_direct_symlinks(&manifest.direct_symlinks, &direct_state_path)
       .context("Failed to apply direct symlinks")?;
@@ -617,7 +617,7 @@ fn get_uid_by_name(name: &str) -> Result<u32> {
   // it in a single-threaded context and copy the result immediately.
   let pw = unsafe { libc::getpwnam(c_name.as_ptr()) };
   if pw.is_null() {
-    anyhow::bail!("user '{name}' not found");
+    misstep::bail!("user '{name}' not found");
   }
   Ok(unsafe { (*pw).pw_uid })
 }
@@ -627,7 +627,7 @@ fn get_gid_by_name(name: &str) -> Result<u32> {
   // SAFETY: same rationale as get_uid_by_name.
   let gr = unsafe { libc::getgrnam(c_name.as_ptr()) };
   if gr.is_null() {
-    anyhow::bail!("group '{name}' not found");
+    misstep::bail!("group '{name}' not found");
   }
   Ok(unsafe { (*gr).gr_gid })
 }

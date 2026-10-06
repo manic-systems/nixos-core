@@ -2,8 +2,8 @@
 
 use std::{fs, path::Path};
 
-use anyhow::{Context, Result, anyhow};
 use log::info;
+use misstep::{Result, ResultExt, report};
 
 /// Atomically create or replace a symlink.
 pub fn atomic_symlink(
@@ -14,7 +14,7 @@ pub fn atomic_symlink(
 
   let tmp_path = loop {
     let parent = link.as_ref().parent().ok_or_else(|| {
-      anyhow!("Failed to determine parent of {:?}", link.as_ref())
+      report!("Failed to determine parent of {:?}", link.as_ref())
     })?;
 
     if !parent.exists() {
@@ -26,7 +26,7 @@ pub fn atomic_symlink(
     let mut tmp_name = link
       .as_ref()
       .file_name()
-      .ok_or_else(|| anyhow!("Failed to get file name of {:?}", link.as_ref()))?
+      .ok_or_else(|| report!("Failed to get file name of {:?}", link.as_ref()))?
       .to_os_string();
     tmp_name.push(format!(".tmp{i}"));
     let tmp_path = parent.join(&tmp_name);
@@ -36,7 +36,7 @@ pub fn atomic_symlink(
       Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
         i += 1;
         if i > 100 {
-          return Err(anyhow!(
+          return Err(report!(
             "Failed to find temporary symlink name after 100 attempts"
           ));
         }
@@ -178,7 +178,7 @@ pub fn systemctl_switch_root(sysroot: &str, init: Option<&Path>) -> Result<()> {
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    anyhow::bail!("systemctl switch-root exited unsuccessfully: {stderr}");
+    misstep::bail!("systemctl switch-root exited unsuccessfully: {stderr}");
   }
 
   Ok(())

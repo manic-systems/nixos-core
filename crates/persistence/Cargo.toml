@@ -13,10 +13,10 @@ name = "persistence"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow.workspace     = true
 clap.workspace       = true
 libc.workspace       = true
 log.workspace        = true
+misstep.workspace    = true
 nix.workspace        = true
 serde.workspace      = true
 serde_json.workspace = true

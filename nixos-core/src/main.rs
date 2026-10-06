@@ -1,6 +1,6 @@
 use std::{env, io::Write, path::Path};
 
-use anyhow::{Result, bail};
+use misstep::{Result, bail};
 
 fn main() -> Result<()> {
   init_logger();

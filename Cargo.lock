@@ -6,7 +6,7 @@ version = 4
 name = "activation-common"
 version = "1.1.0"
 dependencies = [
- "anyhow",
+ "misstep",
 ]
 
 [[package]]
@@ -418,8 +418,8 @@ dependencies = [
 name = "init-script"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "clap",
+ "misstep",
 ]
 
 [[package]]
@@ -492,6 +492,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "misstep"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78535bf5c8617e488ae09df837dd55c083781f496948e43c5a69504fc741e3c4"
+
+[[package]]
 name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -507,10 +513,10 @@ dependencies = [
 name = "nixos-core"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "env_logger",
  "init-script",
  "log",
+ "misstep",
  "persistence",
  "setup-etc",
  "stage1",
@@ -559,10 +565,10 @@ checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 name = "persistence"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "libc",
  "log",
+ "misstep",
  "nix",
  "serde",
  "serde_json",
@@ -738,10 +744,10 @@ dependencies = [
 name = "setup-etc"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "libc",
  "log",
+ "misstep",
  "serde",
  "serde_json",
  "smfh-core",
@@ -814,8 +820,8 @@ dependencies = [
 name = "stage1"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "libc",
+ "misstep",
  "nix",
 ]
 
@@ -824,10 +830,10 @@ name = "stage2"
 version = "1.1.0"
 dependencies = [
  "activation-common",
- "anyhow",
  "clap",
  "libc",
  "log",
+ "misstep",
  "nix",
  "serde",
  "serde_json",
@@ -961,9 +967,9 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 name = "update-users-groups"
 version = "1.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "libc",
+ "misstep",
  "serde",
  "serde_json",
  "sha-crypt",

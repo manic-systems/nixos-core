@@ -6,8 +6,8 @@ use std::{
   process::Command,
 };
 
-use anyhow::{Context, Result};
 use log::info;
+use misstep::{Result, ResultExt};
 
 /// Create each directory in `dirs` if it does not already exist.
 pub fn create_directories(dirs: &[&str]) -> Result<()> {
@@ -48,18 +48,18 @@ pub fn run_shell_script(script: &Path) -> Result<()> {
     {
       use std::os::unix::process::ExitStatusExt;
       if let Some(code) = status.code() {
-        anyhow::bail!("Script failed with exit code: {code}");
+        misstep::bail!("Script failed with exit code: {code}");
       } else if let Some(signal) = status.signal() {
-        anyhow::bail!("Script terminated by signal: {signal}");
+        misstep::bail!("Script terminated by signal: {signal}");
       }
     }
     #[cfg(not(unix))]
     {
       if let Some(code) = status.code() {
-        anyhow::bail!("Script failed with exit code: {}", code);
+        misstep::bail!("Script failed with exit code: {}", code);
       }
     }
-    anyhow::bail!("Script failed with unknown status");
+    misstep::bail!("Script failed with unknown status");
   }
 
   Ok(())

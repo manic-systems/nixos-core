@@ -6,8 +6,8 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
 use clap::Parser;
+use misstep::{Result, ResultExt, bail};
 use serde::Deserialize;
 
 // These are the only safe-to-call libc functions we need: getgrgid/getpwuid for
@@ -950,7 +950,7 @@ fn alloc_sub_uid(
     }
     id = id
       .checked_add(SUBUID_DELTA)
-      .ok_or_else(|| anyhow::anyhow!("subordinate UID range overflow"))?;
+      .ok_or_else(|| misstep::report!("subordinate UID range overflow"))?;
   }
 
   bail!("out of free subordinate UIDs");
@@ -964,12 +964,12 @@ fn date_to_days(date: &str) -> Result<u64> {
   let err = || format!("Invalid date format '{date}', expected YYYY-MM-DD");
   let bytes = date.as_bytes();
   if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
-    return Err(anyhow::anyhow!(err()));
+    return Err(misstep::Report::msg(err()));
   }
   let parse = |range: std::ops::Range<usize>| {
     date
       .get(range)
-      .ok_or_else(|| anyhow::anyhow!(err()))?
+      .ok_or_else(|| misstep::Report::msg(err()))?
       .parse::<u32>()
       .with_context(err)
   };
@@ -977,7 +977,7 @@ fn date_to_days(date: &str) -> Result<u64> {
   let m = parse(5..7)?;
   let d = parse(8..10)?;
   if !(1..=12).contains(&m) || !(1..=days_in_month(y, m)).contains(&d) {
-    return Err(anyhow::anyhow!(err()));
+    return Err(misstep::Report::msg(err()));
   }
   let days = days_from_civil(y, m, d);
   if days < 0 {
@@ -1037,7 +1037,7 @@ fn hash_password(password: &str) -> Result<String> {
   };
 
   if ret < 0 {
-    return Err(anyhow::anyhow!("getrandom: {}", Error::last_os_error()));
+    return Err(misstep::report!("getrandom: {}", Error::last_os_error()));
   }
 
   let salt: String = raw
@@ -1045,7 +1045,7 @@ fn hash_password(password: &str) -> Result<String> {
     .map(|b| CHARSET[(*b as usize) & 0x3F] as char)
     .collect();
   let params = sha_crypt::Params::new(sha_crypt::Params::RECOMMENDED_ROUNDS)
-    .map_err(|e| anyhow::anyhow!("sha-crypt params: {e:?}"))?;
+    .map_err(|e| misstep::report!("sha-crypt params: {e:?}"))?;
   let hash =
     sha_crypt::sha512_crypt(password.as_bytes(), salt.as_bytes(), params);
   let encoded = sha512_crypt_b64(&hash);

@@ -4,7 +4,7 @@ use std::{
   path::Path,
 };
 
-use anyhow::{Context, Result};
+use misstep::{Result, ResultExt};
 
 // Unescape octal sequences in /proc/mounts paths (e.g., \040 -> ' ').
 fn unescape_mount_path(s: &str) -> String {
@@ -61,5 +61,5 @@ pub fn get_mount_options(path: &Path) -> Result<Vec<String>> {
     }
   }
 
-  anyhow::bail!("Mount point not found: {}", path.display())
+  misstep::bail!("Mount point not found: {}", path.display())
 }
