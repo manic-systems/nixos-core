@@ -5,18 +5,17 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use clap::Parser;
 use log::{info, warn};
 use misstep::{Result, ResultExt};
+use pound::Parse;
 use serde::{Deserialize, Serialize};
 use smfh_core::manifest::{File as ManifestFile, Manifest};
 
 mod manifest_diff;
 
-/// Update /etc from the current NixOS configuration
-#[derive(Parser, Debug)]
-#[command(name = "setup-etc")]
-#[command(about = "Atomically apply /etc files from /etc/static")]
+/// Atomically apply /etc files from /etc/static
+#[derive(Parse, Debug)]
+#[pound(name = "setup-etc")]
 struct Args {
   /// Path to the /nix/store/..-etc tree
   etc_dir: String,
@@ -52,7 +51,7 @@ struct EtcManifest {
 /// Apply /etc files from the given nix store path, updating /etc/static and all
 /// derived symlinks.
 pub fn run(args: &[String]) -> Result<()> {
-  let args = Args::parse_from(args);
+  let args = Args::parse_from(args.iter().skip(1).map(String::as_str));
   let etc = PathBuf::from(&args.etc_dir);
 
   // Step 1: Atomically update the /etc/static symlink.
