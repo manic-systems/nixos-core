@@ -1631,9 +1631,14 @@ fn mount_root(
       (entry.device.clone(), Some(entry.fstype.clone()))
     };
   let root_device = &root_device_owned;
+  let rootfstype = cmdline.get("rootfstype");
+  let early_fstype = rootfstype.or(fsinfo_fstype.as_ref());
 
   // Handle special root devices
-  if root_device == "tmpfs" {
+  if root_device == "tmpfs"
+    || ((root_device == "none" || root_device.is_empty())
+      && early_fstype.is_some_and(|s| s == "tmpfs"))
+  {
     // Root on tmpfs (e.g., for live systems)
     fs::create_dir_all(target_root)?;
     mount(
@@ -1684,11 +1689,7 @@ fn mount_root(
   // In bcachefs, the filesystem UUID is fs-level, and not partition-level, so
   // `/dev/disk/by-uuid/<uuid>` may never appear and multi-device paths never
   // appear. Skip the udev-symlink wait and hand off to `mount.bcachefs`.
-  let early_fstype = cmdline
-    .get("rootfstype")
-    .cloned()
-    .or_else(|| fsinfo_fstype.clone());
-  if early_fstype.as_deref() == Some("bcachefs") {
+  if early_fstype.is_some_and(|s| s == "bcachefs") {
     let mut mount_opts: Vec<String> = cmdline
       .get("rootflags")
       .map(|s| s.split(',').map(String::from).collect())
@@ -1773,8 +1774,7 @@ fn mount_root(
   let mount_device = mount_device_owned.as_str();
   log_message(&format!("Using root device: {mount_device}"), true);
 
-  let fstype = cmdline
-    .get("rootfstype")
+  let fstype = rootfstype
     .cloned()
     .or_else(|| udev_fs_type(mount_device))
     .or(fsinfo_fstype)
