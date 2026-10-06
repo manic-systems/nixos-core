@@ -5,13 +5,12 @@ use std::{
   path::Path,
 };
 
-use clap::Parser;
 use misstep::{OptionExt, Result};
+use pound::Parse;
 
-/// Create generic /sbin/init script
-#[derive(Parser, Debug)]
-#[command(name = "init-script-builder")]
-#[command(about = "Create the generic init script and configuration list")]
+/// Create the generic init script and configuration list
+#[derive(Parse, Debug)]
+#[pound(name = "init-script-builder")]
 struct Args {
   /// Path to the default system configuration
   default_config: String,
@@ -27,7 +26,7 @@ struct InitEntry {
 /// Build the /sbin/init boot menu and configuration list from installed
 /// generations.
 pub fn run(args: &[String]) -> Result<()> {
-  let args = Args::parse_from(args);
+  let args = Args::parse_from(args.iter().skip(1).map(String::as_str));
 
   let boot_root = Path::new("/boot");
   let default_config = Path::new(&args.default_config);

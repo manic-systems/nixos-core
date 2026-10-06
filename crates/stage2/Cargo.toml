@@ -21,11 +21,11 @@ path = "src/lib.rs"
 [dependencies]
 activation-common.workspace = true
 
-clap.workspace    = true
 libc.workspace    = true
 log.workspace     = true
 misstep.workspace = true
 nix.workspace     = true
+pound.workspace   = true
 
 # Bootspec deps
 serde      = { workspace = true, optional = true }

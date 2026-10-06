@@ -9,5 +9,5 @@ repository.workspace   = true
 readme                 = "./README.md"
 
 [dependencies]
-clap.workspace    = true
 misstep.workspace = true
+pound.workspace   = true

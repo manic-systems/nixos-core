@@ -5,8 +5,8 @@
 //! the nixos-core multicall binary.
 use std::path::Path;
 
-use clap::Parser;
 use misstep::ResultExt;
+use pound::Parse;
 
 pub mod bash_compat;
 pub mod cli;
@@ -83,7 +83,7 @@ pub fn run_and_handoff(args: &cli::Args) -> ! {
 
 /// Parse args from a slice and run stage 2 initialization with systemd handoff.
 pub fn run_from_args_and_handoff(args: &[String]) -> ! {
-  let parsed = cli::Args::parse_from(args);
+  let parsed = cli::Args::parse_from(args.iter().skip(1).map(String::as_str));
   run_and_handoff_inner(&parsed);
 }
 

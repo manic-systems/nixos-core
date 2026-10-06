@@ -6,8 +6,8 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use clap::Parser;
 use misstep::{Result, ResultExt, bail};
+use pound::Parse;
 use serde::Deserialize;
 
 // These are the only safe-to-call libc functions we need: getgrgid/getpwuid for
@@ -53,16 +53,15 @@ const SUBUID_MIN: u32 = 100000;
 const SUBUID_MAX: u32 = 100000 + 29000 * 65536 - 1;
 const SUBUID_DELTA: u32 = 65536;
 
-/// Manage /etc/passwd, /etc/group, and /etc/shadow
-#[derive(Parser, Debug)]
-#[command(name = "update-users-groups")]
-#[command(about = "Update system user and group databases")]
+/// Update system user and group databases
+#[derive(Parse, Debug)]
+#[pound(name = "update-users-groups")]
 struct Args {
   /// Path to JSON spec file
   spec_file: String,
 
   /// Dry run - don't make any changes
-  #[arg(long = "dry-activate")]
+  #[pound(long = "dry-activate")]
   dry_activate: bool,
 }
 
@@ -148,7 +147,7 @@ struct UserEntry {
 /// Update /etc/passwd, /etc/group, /etc/shadow, and related state files from a
 /// JSON spec.
 pub fn run(args: &[String]) -> Result<()> {
-  let args = Args::parse_from(args);
+  let args = Args::parse_from(args.iter().skip(1).map(String::as_str));
 
   let is_dry = args.dry_activate
     || std::env::var("NIXOS_ACTION").unwrap_or_default() == "dry-activate";
