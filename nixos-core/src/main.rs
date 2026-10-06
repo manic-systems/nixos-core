@@ -6,24 +6,24 @@ fn main() -> Result<()> {
   init_logger();
 
   let all_args: Vec<String> = env::args().collect();
-
-  let (command, handler_args): (&str, &[String]) = {
-    let argv0_base = Path::new(&all_args[0])
-      .file_stem()
-      .and_then(|s| s.to_str())
-      .unwrap_or("nixos-core");
-
-    if argv0_base != "nixos-core" {
-      (argv0_base, &all_args[..])
-    } else if all_args.len() >= 2 {
-      (all_args[1].as_str(), &all_args[1..])
-    } else {
-      print_usage();
-      bail!("No command specified. Usage: nixos-core <command> [args...]");
-    }
-  };
-
+  let (command, handler_args) = route_args(&all_args)?;
   dispatch(command, handler_args)
+}
+
+fn route_args(all_args: &[String]) -> Result<(&str, &[String])> {
+  let argv0_base = Path::new(&all_args[0])
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or("nixos-core");
+
+  if argv0_base != "nixos-core" {
+    Ok((argv0_base, all_args))
+  } else if all_args.len() >= 2 {
+    Ok((all_args[1].as_str(), &all_args[1..]))
+  } else {
+    print_usage();
+    bail!("No command specified. Usage: nixos-core <command> [args...]");
+  }
 }
 
 fn init_logger() {
@@ -82,6 +82,8 @@ fn dispatch(command: &str, args: &[String]) -> Result<()> {
 
     #[cfg(feature = "init-script")]
     "init-script" | "init-script-builder" => init_script::run(args),
+    #[cfg(feature = "secrets")]
+    "secrets" => secrets::run(args),
 
     #[cfg(feature = "persistence")]
     "persist" => persistence::run(args),
@@ -112,6 +114,8 @@ fn print_usage() {
   eprintln!(
     "  init-script           Create the generic /sbin/init fallback script"
   );
+  #[cfg(feature = "secrets")]
+  eprintln!("  secrets               Manage age-encrypted secrets");
   #[cfg(feature = "persistence")]
   eprintln!(
     "  persist               Project persistent paths into the live root"
@@ -122,4 +126,53 @@ fn print_usage() {
   );
   #[cfg(feature = "stage-2")]
   eprintln!("  stage-2-init          Activation and systemd handoff");
+}
+
+#[cfg(all(test, feature = "secrets"))]
+mod tests {
+  use std::{fs, os::unix::fs::PermissionsExt};
+
+  use super::{dispatch, route_args};
+
+  #[test]
+  fn secrets_keygen_accepts_subcommand_and_multicall_invocation() {
+    let dir = tempfile::tempdir().expect("temporary key directory");
+    for (program, prefix) in [
+      ("nixos-core", Some("secrets")),
+      ("/nix/store/test/bin/secrets", None),
+    ] {
+      let key = dir.path().join(if prefix.is_some() {
+        "subcommand-key"
+      } else {
+        "multicall-key"
+      });
+      let mut argv = vec![program.to_owned()];
+      if let Some(command) = prefix {
+        argv.push(command.to_owned());
+      }
+      argv.extend([
+        "keygen".into(),
+        "--output".into(),
+        key.display().to_string(),
+      ]);
+
+      let (command, args) = route_args(&argv).expect("route secrets command");
+      assert_eq!(command, "secrets");
+      dispatch(command, args).expect("generate a key through secrets");
+      let contents = fs::read_to_string(&key).expect("read generated identity");
+      assert!(
+        contents
+          .lines()
+          .any(|line| line.starts_with("AGE-SECRET-KEY-"))
+      );
+      assert_eq!(
+        fs::metadata(&key)
+          .expect("identity metadata")
+          .permissions()
+          .mode()
+          & 0o777,
+        0o600,
+      );
+    }
+  }
 }

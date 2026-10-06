@@ -9,7 +9,8 @@ description            = "Core NixOS system utilities"
 
 # Multi-call binary symlinks will be created for each enabled feature
 [features]
-default             = [ "update-users-groups", "setup-etc", "init-script", "persistence", "stage-1", "stage-2" ]
+default             = [ "secrets", "update-users-groups", "setup-etc", "init-script", "persistence", "stage-1", "stage-2" ]
+secrets             = [ "dep:secrets" ]
 init-script         = [ "dep:init-script" ]
 persistence         = [ "dep:persistence" ]
 setup-etc           = [ "dep:setup-etc" ]
@@ -18,6 +19,7 @@ stage-2             = [ "dep:stage2" ]
 update-users-groups = [ "dep:update-users-groups" ]
 
 [dependencies]
+secrets             = { workspace = true, optional = true }
 init-script         = { workspace = true, optional = true }
 persistence         = { workspace = true, optional = true }
 setup-etc           = { workspace = true, optional = true }
