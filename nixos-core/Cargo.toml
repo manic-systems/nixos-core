@@ -25,9 +25,9 @@ stage1              = { workspace = true, optional = true }
 stage2              = { workspace = true, optional = true }
 update-users-groups = { workspace = true, optional = true }
 
-anyhow.workspace     = true
 env_logger.workspace = true
 log.workspace        = true
+misstep.workspace    = true
 
 [dev-dependencies]
 tempfile.workspace = true

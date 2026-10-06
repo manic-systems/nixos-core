@@ -9,4 +9,4 @@ repository.workspace   = true
 readme                 = "./README.md"
 
 [dependencies]
-anyhow.workspace = true
+misstep.workspace = true

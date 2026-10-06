@@ -4,8 +4,8 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
 use log::warn;
+use misstep::{Result, ResultExt};
 
 use crate::DirectSymlink;
 

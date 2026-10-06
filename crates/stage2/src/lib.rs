@@ -5,8 +5,8 @@
 //! the nixos-core multicall binary.
 use std::path::Path;
 
-use anyhow::Context;
-use clap::Parser;
+use misstep::ResultExt;
+use pound::Parse;
 
 pub mod bash_compat;
 pub mod cli;
@@ -14,7 +14,7 @@ pub mod common;
 pub mod nixos_init_compat;
 
 /// Run stage 2 initialization (without systemd handoff).
-pub fn run(args: &cli::Args) -> anyhow::Result<()> {
+pub fn run(args: &cli::Args) -> misstep::Result<()> {
   #[cfg(feature = "bootspec")]
   if args.use_bootspec() {
     log::info!(
@@ -83,7 +83,7 @@ pub fn run_and_handoff(args: &cli::Args) -> ! {
 
 /// Parse args from a slice and run stage 2 initialization with systemd handoff.
 pub fn run_from_args_and_handoff(args: &[String]) -> ! {
-  let parsed = cli::Args::parse_from(args);
+  let parsed = cli::Args::parse_from(args.iter().skip(1).map(String::as_str));
   run_and_handoff_inner(&parsed);
 }
 
@@ -140,7 +140,7 @@ fn run_and_handoff_inner(args: &cli::Args) -> ! {
 
 fn recreate_booted_system_atomically(
   system_config: &Path,
-) -> anyhow::Result<()> {
+) -> misstep::Result<()> {
   let booted_system = Path::new("/run/booted-system");
 
   nixos_init_compat::atomic_symlink(system_config, booted_system).with_context(
@@ -155,7 +155,7 @@ fn recreate_booted_system_atomically(
 }
 
 #[cfg(feature = "bootspec")]
-fn load_bootspec(path: &Path) -> anyhow::Result<serde_json::Value> {
+fn load_bootspec(path: &Path) -> misstep::Result<serde_json::Value> {
   use std::fs;
   let raw = fs::read_to_string(path).with_context(|| {
     format!("Failed to read bootspec file: {}", path.display())

@@ -229,8 +229,8 @@ proceed you may open an issue to discuss your changes with us beforehand.
 ### Hacking
 
 `nixos-core` is built with the latest stable Rust available in Nixpkgs, which is
-1.94.0 at the time of writing. The Minimum Supported Rust Version (MSRV) is
-therefore set at 1.94.0, and may change as the language evolves.
+1.98.1 at the time of writing. The Minimum Supported Rust Version (MSRV) is
+set at 1.95.0, and may change as the language evolves.
 
 #### Safety
 
