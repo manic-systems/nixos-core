@@ -121,6 +121,7 @@ pub fn run(args: &[String]) -> Result<()> {
       .context("Failed to commit manifest")?;
     fs::rename(&direct_state_tmp, &direct_state_path)
       .context("Failed to commit direct symlink state")
+      .erase()
   })();
 
   if let Err(ref e) = diff_result {

@@ -747,6 +747,7 @@ fn load_json_file<T: serde::de::DeserializeOwned>(path: &str) -> Result<T> {
   }
   serde_json::from_str(&content)
     .with_context(|| format!("Failed to parse JSON from {path}"))
+    .erase()
 }
 
 fn load_declarative_list(path: &str) -> Result<HashSet<String>> {
@@ -971,6 +972,7 @@ fn date_to_days(date: &str) -> Result<u64> {
       .ok_or_else(|| misstep::Report::msg(err()))?
       .parse::<u32>()
       .with_context(err)
+      .erase()
   };
   let y = parse(0..4)? as i32;
   let m = parse(5..7)?;

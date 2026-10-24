@@ -42,12 +42,14 @@ pub fn atomic_symlink(
         }
       },
       Err(err) => {
-        return Err(err).with_context(|| {
-          format!(
-            "Failed to create temporary symlink at {}",
-            tmp_path.display()
-          )
-        });
+        return Err(err)
+          .with_context(|| {
+            format!(
+              "Failed to create temporary symlink at {}",
+              tmp_path.display()
+            )
+          })
+          .erase();
       },
     }
   };

@@ -68,9 +68,9 @@ fn filtered_old_manifest(
     Ok(contents) => contents,
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
     Err(e) => {
-      return Err(e).with_context(|| {
-        format!("Failed to read {}", manifest_path.display())
-      });
+      return Err(e)
+        .with_context(|| format!("Failed to read {}", manifest_path.display()))
+        .erase();
     },
   };
 
