@@ -89,6 +89,7 @@ impl MountOptions {
       None::<&str>,
     )
     .context("Failed to apply bind mount flags")
+    .erase()
   }
 
   pub(crate) fn record(

@@ -137,7 +137,7 @@ pub fn run(args: &Args) -> Result<()> {
       Err(e) => {
         log_message(
           log_dest.as_deref(),
-          &format!("stage-2-init: warning: stdio capture unavailable: {e:#}"),
+          &format!("stage-2-init: warning: stdio capture unavailable: {e}"),
         );
         None
       },
@@ -415,6 +415,7 @@ fn remount_root_rw(log_dest: &Option<std::path::PathBuf>) -> Result<()> {
     None::<&str>,
   )
   .context("mount -o remount,rw / failed")
+  .erase()
 }
 
 fn remount_flags_from_options(opts: &[String]) -> MsFlags {

@@ -216,9 +216,11 @@ impl DeviceManager {
               libc::close(read_fd);
               libc::close(write_fd);
             }
-            return Err(e).with_context(|| {
-              format!("Failed to start mdevd: {}", mdevd.display())
-            });
+            return Err(e)
+              .with_context(|| {
+                format!("Failed to start mdevd: {}", mdevd.display())
+              })
+              .erase();
           },
         };
         unsafe {
@@ -230,9 +232,11 @@ impl DeviceManager {
         let mut byte = [0u8; 1];
         if let Err(e) = readiness.read_exact(&mut byte) {
           let _ = child.wait();
-          return Err(e).with_context(|| {
-            format!("mdevd did not become ready: {}", mdevd.display())
-          });
+          return Err(e)
+            .with_context(|| {
+              format!("mdevd did not become ready: {}", mdevd.display())
+            })
+            .erase();
         }
         drop(readiness);
 
@@ -242,9 +246,11 @@ impl DeviceManager {
             unsafe {
               libc::kill(child_pid, libc::SIGTERM);
             }
-            return Err(e).with_context(|| {
-              format!("mdevd coldplug failed: {}", coldplug.display())
-            });
+            return Err(e)
+              .with_context(|| {
+                format!("mdevd coldplug failed: {}", coldplug.display())
+              })
+              .erase();
           },
         };
         if !status.success() {
@@ -686,7 +692,8 @@ impl<'a> Mount<'a> {
       unsafe { libc::ioctl(loop_control.as_raw_fd(), LOOP_CTL_GET_FREE, 0) };
     if loop_number < 0 {
       return Err(std::io::Error::last_os_error())
-        .context("LOOP_CTL_GET_FREE failed");
+        .context("LOOP_CTL_GET_FREE failed")
+        .erase();
     }
 
     let loop_path = format!("/dev/loop{loop_number}");
@@ -705,7 +712,8 @@ impl<'a> Mount<'a> {
     };
     if set_fd < 0 {
       return Err(std::io::Error::last_os_error())
-        .with_context(|| format!("LOOP_SET_FD failed for {loop_path}"));
+        .with_context(|| format!("LOOP_SET_FD failed for {loop_path}"))
+        .erase();
     }
 
     let mut loop_info: LoopInfo64 = unsafe { std::mem::zeroed() };
@@ -724,7 +732,8 @@ impl<'a> Mount<'a> {
       let err = std::io::Error::last_os_error();
       let _ = unsafe { libc::ioctl(loop_device.as_raw_fd(), LOOP_CLR_FD, 0) };
       return Err(err)
-        .with_context(|| format!("LOOP_SET_STATUS64 failed for {loop_path}"));
+        .with_context(|| format!("LOOP_SET_STATUS64 failed for {loop_path}"))
+        .erase();
     }
 
     Ok((loop_path, loop_device))
@@ -1325,6 +1334,7 @@ fn handle_resume(
         fs::write("/sys/power/resume", format!("{major}:{minor}"))
           .context("Failed to write to /sys/power/resume")
       })
+      .erase()
   } else {
     Err(misstep::report!(
       "Resume device does not exist: {resume_dev}"
@@ -1887,7 +1897,7 @@ fn mount_additional_filesystems(
     if let Err(e) = mount_filesystem(&adjusted_fs_info, dm) {
       log_message(
         &format!(
-          "Warning: failed to mount {:?}: {:#}",
+          "Warning: failed to mount {:?}: {}",
           adjusted_fs_info.mountpoint, e
         ),
         true,
@@ -2787,7 +2797,7 @@ pub fn run(args: &[String]) -> Result<()> {
         run_fsck(&fs_info.device, &fs_info.fstype, &fs_info.options)
     {
       log_message(
-        &format!("Warning: fsck failed on {}: {e:#}", fs_info.device),
+        &format!("Warning: fsck failed on {}: {e}", fs_info.device),
         true,
       );
     }

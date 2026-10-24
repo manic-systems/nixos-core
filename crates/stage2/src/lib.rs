@@ -90,8 +90,8 @@ pub fn run_from_args_and_handoff(args: &[String]) -> ! {
 fn run_and_handoff_inner(args: &cli::Args) -> ! {
   if let Err(e) = run(args) {
     // Write to kmsg as a safety net in case the console fd is not usable.
-    let _ = std::fs::write("/dev/kmsg", format!("stage2: FATAL: {e:#}\n"));
-    eprintln!("stage-2-init: FATAL: {e:#}");
+    let _ = std::fs::write("/dev/kmsg", format!("stage2: FATAL: {e}\n"));
+    eprintln!("stage-2-init: FATAL: {e}");
     std::process::exit(1);
   }
 

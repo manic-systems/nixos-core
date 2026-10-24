@@ -207,8 +207,7 @@ fn rollback(error: misstep::Report, restored: Result<()>) -> misstep::Report {
     Ok(()) => error,
     Err(restore_error) => {
       error.context(format!(
-        "Restoring the previous persistence plan also failed \
-         ({restore_error:#})"
+        "Restoring the previous persistence plan also failed ({restore_error})"
       ))
     },
   }
@@ -389,9 +388,11 @@ fn preflight_target(root: &Root, entry: &Entry) -> Result<()> {
         },
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => {
-          Err(error).with_context(|| {
-            format!("Failed to inspect {}", entry.target.display())
-          })
+          Err(error)
+            .with_context(|| {
+              format!("Failed to inspect {}", entry.target.display())
+            })
+            .erase()
         },
       }
     },
@@ -639,9 +640,11 @@ fn remove_placeholder(
   match unlinkat(parent, Path::new(name), flags) {
     Ok(()) | Err(Errno::ENOENT | Errno::ENOTEMPTY) => Ok(()),
     Err(error) => {
-      Err(error).with_context(|| {
-        format!("Failed to remove placeholder {}", entry.target.display())
-      })
+      Err(error)
+        .with_context(|| {
+          format!("Failed to remove placeholder {}", entry.target.display())
+        })
+        .erase()
     },
   }
 }
@@ -717,9 +720,11 @@ fn owned_symlink(
       Ok(None)
     },
     Err(error) => {
-      Err(error).with_context(|| {
-        format!("Failed to inspect {}", entry.target.display())
-      })
+      Err(error)
+        .with_context(|| {
+          format!("Failed to inspect {}", entry.target.display())
+        })
+        .erase()
     },
   }
 }
@@ -745,6 +750,7 @@ fn remove_owned_symlink(root: &Root, entry: &Entry) -> Result<()> {
         .with_context(|| {
           format!("Failed to remove stale symlink {}", entry.target.display())
         })
+        .erase()
     },
     result => {
       rename_noreplace(
@@ -767,9 +773,11 @@ fn remove_owned_symlink(root: &Root, entry: &Entry) -> Result<()> {
           )
         },
         Err(error) => {
-          Err(error).with_context(|| {
-            format!("Failed to inspect {}", entry.target.display())
-          })
+          Err(error)
+            .with_context(|| {
+              format!("Failed to inspect {}", entry.target.display())
+            })
+            .erase()
         },
       }
     },
@@ -813,6 +821,7 @@ fn write_state(root: &Root, path: &Path, entries: &[Entry]) -> Result<()> {
     .with_context(|| {
       format!("Failed to commit runtime state {}", path.display())
     })
+    .erase()
 }
 
 fn rename_noreplace(
@@ -904,6 +913,7 @@ fn copy_metadata(from: &OwnedFd, to: &OwnedFd) -> Result<()> {
   .context("Failed to copy ownership")?;
   fchmod(to, Mode::from_bits_truncate(metadata.mode() & 0o7777))
     .context("Failed to copy mode")
+    .erase()
 }
 
 fn parse_mode(mode: &str) -> Result<u32> {
@@ -1051,9 +1061,11 @@ fn link(root: &Root, entry: &Entry) -> Result<bool> {
       Ok(true)
     },
     Err(error) => {
-      Err(error).with_context(|| {
-        format!("Failed to inspect {}", entry.target.display())
-      })
+      Err(error)
+        .with_context(|| {
+          format!("Failed to inspect {}", entry.target.display())
+        })
+        .erase()
     },
   }
 }
@@ -1156,12 +1168,14 @@ impl Root {
         bail!("Existing {} is not a directory", path.display())
       },
       Err(error) => {
-        Err(error).with_context(|| {
-          format!(
-            "Failed to open {} without following symlinks",
-            path.display()
-          )
-        })
+        Err(error)
+          .with_context(|| {
+            format!(
+              "Failed to open {} without following symlinks",
+              path.display()
+            )
+          })
+          .erase()
       },
     }
   }
@@ -1230,9 +1244,9 @@ impl Root {
           ) {
             Ok(()) | Err(Errno::EEXIST) => {},
             Err(error) => {
-              return Err(error).with_context(|| {
-                format!("Failed to create {}", path.display())
-              });
+              return Err(error)
+                .with_context(|| format!("Failed to create {}", path.display()))
+                .erase();
             },
           }
           let next = openat(&current, Path::new(name), flags, Mode::empty())
@@ -1261,12 +1275,14 @@ impl Root {
           created = true;
         },
         Err(error) => {
-          return Err(error).with_context(|| {
-            format!(
-              "Failed to traverse {} without following symlinks",
-              path.display()
-            )
-          });
+          return Err(error)
+            .with_context(|| {
+              format!(
+                "Failed to traverse {} without following symlinks",
+                path.display()
+              )
+            })
+            .erase();
         },
       }
     }
@@ -1321,6 +1337,7 @@ impl Root {
       Some(Gid::from_raw(owner.gid())),
     )
     .context("Failed to chown created directory")
+    .erase()
   }
 }
 
@@ -1333,7 +1350,7 @@ fn discard_failure<E: Into<misstep::Report>>(
     Ok(()) => error,
     Err(remove_error) => {
       error.context(format!(
-        "Left {} behind because removing it failed ({:#})",
+        "Left {} behind because removing it failed ({})",
         path.display(),
         remove_error.into()
       ))
@@ -1373,6 +1390,7 @@ fn proc_path(fd: &OwnedFd) -> PathBuf {
 fn metadata_fd(fd: &OwnedFd) -> Result<fs::Metadata> {
   fs::metadata(proc_path(fd))
     .context("Failed to inspect open filesystem object")
+    .erase()
 }
 
 #[cfg(test)]
@@ -1652,7 +1670,7 @@ mod tests {
     let error = root
       .ensure_parent(Path::new("/persist/etc/token"), &DirDefaults::default())
       .unwrap_err();
-    assert!(format!("{error:#}").contains("without following symlinks"));
+    assert!(format!("{error}").contains("without following symlinks"));
     assert!(!temporary.path().join("outside/etc").exists());
   }
 
@@ -1669,7 +1687,7 @@ mod tests {
     let error = root
       .inspect_node(Path::new("/persist/token"), Kind::File, "source")
       .unwrap_err();
-    assert!(format!("{error:#}").contains("wrong type"));
+    assert!(format!("{error}").contains("wrong type"));
   }
 
   #[test]
