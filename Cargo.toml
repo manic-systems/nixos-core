@@ -19,8 +19,8 @@ stage1              = { path = "./crates/stage1", version = "1.1.0" }
 stage2              = { path = "./crates/stage2", version = "1.1.0" }
 update-users-groups = { path = "./crates/update-users-groups", version = "1.1.0" }
 
-misstep    = "0.3.0"
-pound      = "0.3.0"
+misstep    = "0.4.1"
+pound      = "0.5.2"
 env_logger = { version = "0.11.11", default-features = false }
 libc       = "0.2.189"
 log        = "0.4.34"
