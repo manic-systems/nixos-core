@@ -123,9 +123,7 @@ self: {
   preFailCommandsFile = pkgs.writeText "pre-fail-commands" config.boot.initrd.preFailCommands;
   preDeviceCommandsFile = pkgs.writeText "pre-device-commands" config.boot.initrd.preDeviceCommands;
   preLVMCommandsFile = pkgs.writeText "pre-lvm-commands" config.boot.initrd.preLVMCommands;
-  postDeviceCommandsFile = pkgs.writeText "post-device-commands" config.boot.initrd.postDeviceCommands;
   postResumeCommandsFile = pkgs.writeText "post-resume-commands" config.boot.initrd.postResumeCommands;
-  postMountCommandsFile = pkgs.writeText "post-mount-commands" config.boot.initrd.postMountCommands;
   postBootCommandsFile = pkgs.writeText "post-boot-commands" ''
     ${config.boot.postBootCommands}
     ${config.powerManagement.powerUpCommands}
@@ -153,9 +151,7 @@ self: {
       export preFailCommands=${preFailCommandsFile}
       export preDeviceCommands=${preDeviceCommandsFile}
       export preLVMCommands=${preLVMCommandsFile}
-      export postDeviceCommands=${postDeviceCommandsFile}
       export postResumeCommands=${postResumeCommandsFile}
-      export postMountCommands=${postMountCommandsFile}
       ${optionalString (config.networking.hostId != null) ''
         export HOST_ID=${escapeShellArg config.networking.hostId}
       ''}
@@ -278,12 +274,7 @@ self: {
             '';
           symlink = "/etc/multipath.conf";
         }
-      ]
-      ++ lib.mapAttrsToList (symlink: options: {
-        inherit symlink;
-        object = options.source;
-      })
-      config.boot.initrd.extraFiles;
+      ];
   };
 in {
   imports = [./persistence.nix];
@@ -320,32 +311,24 @@ in {
     # behaviour in non-standard environments. This is deliberately *not* named `settings`
     # to leave room for a future settings option in case we decide to set that up.
     components = {
-      extraUtilsCommand.enable =
-        mkEnableOption ""
-        // {
-          default = !config.boot.initrd.systemd.enable;
-          defaultText = literalExpression "!config.boot.initrd.systemd.enable";
-          description = "Whether to place nixos-core in extraUtils for the stage-1 wrapper";
-        };
+      extraUtilsCommand.enable = mkEnableOption "" // {
+        description = "Whether to place nixos-core in extraUtils for the stage-1 wrapper";
+      };
 
       bootStage1 = {
-        enable =
-          mkEnableOption ""
-          // {
-            default = !config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "!config.boot.initrd.systemd.enable";
-            description = ''
-              Whether to create {option}`system.build.bootStage1` wrapper with `nixos-core` available.
+        enable = mkEnableOption "" // {
+          description = ''
+            Whether to create {option}`system.build.bootStage1` wrapper with `nixos-core` available.
 
-              ::: {.note}
+            ::: {.note}
 
-              This option conflicts with NixOS' systemd-in-stage1 option, so it is
-              **generally not recommended** to try and override this option. It may
-              come in handy for Systemd-less NixOS variants still relying on Bash in stage 1.
+            This option conflicts with NixOS' systemd-in-stage1 option, so it is
+            **generally not recommended** to try and override this option. It may
+            come in handy for Systemd-less NixOS variants still relying on Bash in stage 1.
 
-              :::
-            '';
-          };
+            :::
+          '';
+        };
 
         package = mkOption {
           type = package;
@@ -397,16 +380,12 @@ in {
       };
 
       initialRamdisk = {
-        enable =
-          mkEnableOption ""
-          // {
-            default = !config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "!config.boot.initrd.systemd.enable";
-            description = ''
-              Whether to override {option}`system.build.initialRamdisk` with
-              nixos-core's initrd, which embeds the stage-1 wrapper as {file}`/init`.
-            '';
-          };
+        enable = mkEnableOption "" // {
+          description = ''
+            Whether to override {option}`system.build.initialRamdisk` with
+            nixos-core's initrd, which embeds the stage-1 wrapper as {file}`/init`.
+          '';
+        };
 
         package = mkOption {
           type = package;
@@ -478,8 +457,7 @@ in {
         enable =
           mkEnableOption ""
           // {
-            default = config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "config.boot.initrd.systemd.enable";
+            default = true;
             description = ''
               Whether to wire nixos-init-compatible setup into stage2 for the
               systemd-initrd path. When enabled, stage2 receives flags to set up

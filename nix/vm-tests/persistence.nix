@@ -162,15 +162,10 @@ in
       scripted = {
         imports = [common];
         networking.hostId = "8badf00d";
-        boot.initrd = {
-          systemd.enable = false;
-          postDeviceCommands = ''
-            for device in /dev/vdb /dev/vdc /dev/vdd; do
-              if ! blkid "$device" >/dev/null 2>&1; then
-                mke2fs -F "$device"
-              fi
-            done
-          '';
+        virtualisation.fileSystems = {
+          "/persist".options = ["x-systemd.makefs"];
+          "/srv".options = ["x-systemd.makefs"];
+          "/cache".options = ["x-systemd.makefs"];
         };
       };
 
@@ -180,7 +175,6 @@ in
       # We could even consider simply not supporting tmpfs tbh?
       btrfs = {
         imports = [common];
-        boot.initrd.systemd.enable = true;
         networking.hostId = "b7f50001";
         virtualisation.fileSystems = {
           "/persist" = {
@@ -196,24 +190,18 @@ in
 
       bcachefs = {
         imports = [common];
-        boot = {
-          supportedFilesystems = ["bcachefs"];
-          initrd = {
-            systemd.enable = false;
-            postDeviceCommands = ''
-              if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
-                bcachefs format --force /dev/vdb
-              fi
-              for device in /dev/vdc /dev/vdd; do
-                if ! blkid "$device" >/dev/null 2>&1; then
-                  mke2fs -F "$device"
-                fi
-              done
-            '';
-          };
-        };
+        boot.supportedFilesystems = ["bcachefs"];
 
-        virtualisation.fileSystems."/persist".fsType = mkForce "bcachefs";
+        systemd.services.unlock-bcachefs-persist.enable = false;
+        virtualisation.fileSystems = {
+          "/persist" = {
+            fsType = mkForce "bcachefs";
+            neededForBoot = mkForce false;
+            options = ["x-systemd.makefs"];
+          };
+          "/srv".options = ["x-systemd.makefs"];
+          "/cache".options = ["x-systemd.makefs"];
+        };
       };
 
       zfs = {config, ...}: {
@@ -254,7 +242,6 @@ in
 
       systemd = {
         imports = [common];
-        boot.initrd.systemd.enable = true;
         networking.hostId = "cafef00d";
         virtualisation.fileSystems = {
           "/persist".options = ["x-systemd.makefs"];
