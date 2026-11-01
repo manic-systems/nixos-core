@@ -3,29 +3,45 @@
   nixosModule,
   testCommons,
 }:
+let
+  bcachefsUuid = "fef71188-998b-4a00-a263-6b525fe9832b";
+in
 mkTest {
   name = "nixos-core-fs";
 
-  # For bcachefs, stage1 splits the colon-separated device string and waits for
-  # each member individually
   nodes.machine = {
     imports = [nixosModule testCommons];
     system.nixos-core.enable = true;
 
     boot = {
       loader.grub.enable = false;
-      initrd.systemd.enable = false;
       supportedFilesystems = ["bcachefs"];
 
-      initrd.postDeviceCommands = ''
-        if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
-          bcachefs format --force \
-            --metadata_replicas 3 \
-            --label=disk0 /dev/vdb \
-            --label=disk1 /dev/vdc \
-            --label=disk2 /dev/vdd
-        fi
-      '';
+      initrd.systemd.services = {
+        bcachefs-format = {
+          description = "Format the test bcachefs filesystem";
+          requiredBy = ["sysroot-mnt-bcache3.mount"];
+          before = ["sysroot-mnt-bcache3.mount"];
+          wants = ["dev-vdb.device" "dev-vdc.device" "dev-vdd.device"];
+          after = ["dev-vdb.device" "dev-vdc.device" "dev-vdd.device"];
+          unitConfig.DefaultDependencies = false;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = ''
+            if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
+              bcachefs format --force \
+                --uuid=${bcachefsUuid} \
+                --metadata_replicas 3 \
+                --label=disk0 /dev/vdb \
+                --label=disk1 /dev/vdc \
+                --label=disk2 /dev/vdd
+            fi
+          '';
+        };
+        unlock-bcachefs-mnt-bcache3.enable = false;
+      };
     };
 
     virtualisation.emptyDiskImages = [
@@ -36,7 +52,7 @@ mkTest {
 
     # qemu-vm.nix replaces fileSystems via mkVMOverride.
     virtualisation.fileSystems."/mnt/bcache3" = {
-      device = "/dev/vdb:/dev/vdc:/dev/vdd";
+      device = "UUID=${bcachefsUuid}";
       fsType = "bcachefs";
       neededForBoot = true;
       options = ["noatime"];

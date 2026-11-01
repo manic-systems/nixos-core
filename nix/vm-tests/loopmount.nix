@@ -30,7 +30,6 @@ mkTest {
 
       boot = {
         loader.grub.enable = false;
-        initrd.systemd.enable = false;
 
         initrd.availableKernelModules = [
           "loop"
@@ -40,8 +39,7 @@ mkTest {
           "loop"
           "squashfs"
         ];
-
-        initrd.extraFiles."/loopmount-test.squashfs".source = squashfsImage;
+        initrd.systemd.contents."/loopmount-test.squashfs".source = squashfsImage;
       };
 
       virtualisation.fileSystems."/var/squash" = {

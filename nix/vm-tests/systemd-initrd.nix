@@ -13,10 +13,6 @@ mkTest ({nodes, ...}: {
       boot = {
         loader.grub.enable = false;
 
-        # Force systemd initrd; nixos-core's stage1 is a no-op here.
-        # Systemd owns stage1, but stage2/activation/etc still apply.
-        initrd.systemd.enable = true;
-
         # Marker written by stage2's postBootCommands hook.
         postBootCommands = "touch /etc/post-boot-ran";
       };
@@ -27,7 +23,6 @@ mkTest ({nodes, ...}: {
       system.nixos-core.enable = true;
       boot = {
         loader.grub.enable = false;
-        initrd.systemd.enable = true;
 
         postBootCommands = ''
           findmnt --direction backward --first-only --noheadings --output OPTIONS / \

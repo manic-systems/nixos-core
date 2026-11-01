@@ -17,18 +17,32 @@ mkTest {
 
     boot = {
       loader.grub.enable = false;
-      initrd.systemd.enable = false;
       supportedFilesystems = [ "bcachefs" ];
 
-      initrd.postDeviceCommands = ''
-        if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
-          bcachefs format --force \
-            --uuid=${bcachefsUuid} \
-            --metadata_replicas 2 \
-            --label=ssd /dev/vdb \
-            --label=hdd /dev/vdc
-        fi
-      '';
+      initrd.systemd.services = {
+        bcachefs-format = {
+          description = "Format the test bcachefs root filesystem";
+          requiredBy = [ "sysroot.mount" ];
+          before = [ "sysroot.mount" ];
+          wants = [ "dev-vdb.device" "dev-vdc.device" ];
+          after = [ "dev-vdb.device" "dev-vdc.device" ];
+          unitConfig.DefaultDependencies = false;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = ''
+            if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
+              bcachefs format --force \
+                --uuid=${bcachefsUuid} \
+                --metadata_replicas 2 \
+                --label=ssd /dev/vdb \
+                --label=hdd /dev/vdc
+            fi
+          '';
+        };
+        unlock-bcachefs--.enable = false;
+      };
     };
 
     virtualisation = {

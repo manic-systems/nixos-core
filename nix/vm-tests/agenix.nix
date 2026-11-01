@@ -35,10 +35,7 @@
     imports = [testCommons nixosModule agenixModule];
 
     system.nixos-core.enable = true;
-    boot = {
-      loader.grub.enable = false;
-      initrd.systemd.enable = initrdSystemd;
-    };
+    boot.loader.grub.enable = false;
 
     system.activationScripts = {
       agenixHostKey = {

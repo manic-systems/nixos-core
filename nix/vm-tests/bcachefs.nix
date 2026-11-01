@@ -3,6 +3,9 @@
   nixosModule,
   testCommons,
 }:
+let
+  bcachefsUuid = "fef71188-998b-4a00-a263-6b525fe9832b";
+in
 mkTest {
   name = "nixos-core-bcachefs";
 
@@ -15,16 +18,32 @@ mkTest {
 
     boot = {
       loader.grub.enable = false;
-      initrd.systemd.enable = false;
       supportedFilesystems = [ "bcachefs" ];
 
-      initrd.postDeviceCommands = ''
-        if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
-          bcachefs format --force --metadata_replicas 2 \
-            --label=ssd /dev/vdb \
-            --label=hdd /dev/vdc
-        fi
-      '';
+      initrd.systemd.services = {
+        bcachefs-format = {
+          description = "Format the test bcachefs filesystem";
+          requiredBy = [ "sysroot-mnt-bcache.mount" ];
+          before = [ "sysroot-mnt-bcache.mount" ];
+          wants = [ "dev-vdb.device" "dev-vdc.device" ];
+          after = [ "dev-vdb.device" "dev-vdc.device" ];
+          unitConfig.DefaultDependencies = false;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = ''
+            if ! bcachefs show-super /dev/vdb >/dev/null 2>&1; then
+              bcachefs format --force \
+                --uuid=${bcachefsUuid} \
+                --metadata_replicas 2 \
+                --label=ssd /dev/vdb \
+                --label=hdd /dev/vdc
+            fi
+          '';
+        };
+        unlock-bcachefs-mnt-bcache.enable = false;
+      };
     };
 
     virtualisation.emptyDiskImages = [
@@ -35,7 +54,7 @@ mkTest {
     # qemu-vm.nix replaces `fileSystems` via mkVMOverride, meaning a plain
     # fileSystems entry gets dropped. As such, we mount it via virtualisation.
     virtualisation.fileSystems."/mnt/bcache" = {
-      device = "/dev/vdb:/dev/vdc";
+      device = "UUID=${bcachefsUuid}";
       fsType = "bcachefs";
       neededForBoot = true;
       options = [ "noatime" ];
