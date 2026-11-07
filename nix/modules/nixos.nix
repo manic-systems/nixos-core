@@ -323,8 +323,7 @@ in {
       extraUtilsCommand.enable =
         mkEnableOption ""
         // {
-          default = !config.boot.initrd.systemd.enable;
-          defaultText = literalExpression "!config.boot.initrd.systemd.enable";
+          default = false;
           description = "Whether to place nixos-core in extraUtils for the stage-1 wrapper";
         };
 
@@ -332,8 +331,7 @@ in {
         enable =
           mkEnableOption ""
           // {
-            default = !config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "!config.boot.initrd.systemd.enable";
+            default = false;
             description = ''
               Whether to create {option}`system.build.bootStage1` wrapper with `nixos-core` available.
 
@@ -400,8 +398,7 @@ in {
         enable =
           mkEnableOption ""
           // {
-            default = !config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "!config.boot.initrd.systemd.enable";
+            default = false;
             description = ''
               Whether to override {option}`system.build.initialRamdisk` with
               nixos-core's initrd, which embeds the stage-1 wrapper as {file}`/init`.
@@ -478,8 +475,7 @@ in {
         enable =
           mkEnableOption ""
           // {
-            default = config.boot.initrd.systemd.enable;
-            defaultText = literalExpression "config.boot.initrd.systemd.enable";
+            default = true;
             description = ''
               Whether to wire nixos-init-compatible setup into stage2 for the
               systemd-initrd path. When enabled, stage2 receives flags to set up
